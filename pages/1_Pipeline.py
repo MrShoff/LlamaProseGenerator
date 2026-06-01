@@ -3,6 +3,7 @@ from __future__ import annotations
 import difflib
 import html
 import re
+from datetime import datetime
 from pathlib import Path
 
 import streamlit as st
@@ -311,184 +312,254 @@ def _variant_edit_ui(info, variant: str, file_path: Path, edit_key: str, usernam
 
 # ── Autopilot runner ──────────────────────────────────────────────────────────
 
-def _run_autopilot(scenes: list, cfg, db_statuses: dict, username: str, loop_limit: int) -> None:
+def _process_one_scene(
+    info, scene_idx: int, scenes: list, cfg, db_statuses: dict,
+    username: str, loop_limit: int,
+) -> tuple[list[str], bool, bool]:
+    """Process one scene for auto-pilot.
+
+    Returns (log_lines, should_stop, scene_selected).
+    """
+    log: list[str] = []
+
+    def _log(msg: str) -> None:
+        log.append(f"{datetime.now().strftime('%H:%M')}  {msg}")
+
+    locked = _is_locked(scene_idx, scenes, db_statuses, cfg.output_path)
+    if locked:
+        _log(f"⏸ {info.scene_key}: prior scene incomplete — stopping.")
+        return log, True, False
+
+    row = db_statuses.get(info.scene_key, {})
+    status = row.get("status", "needs_draft")
+
+    if status in ("selected", "assembled"):
+        _log(f"✓ {info.scene_key}: already complete.")
+        return log, False, True
+
+    if status == "needs_intervention":
+        _log(f"⚠ {info.scene_key}: awaiting manual intervention — stopping.")
+        return log, True, False
+
+    _log(f"▸ {info.scene_key}")
     stopped = False
 
-    with st.status("Auto-pilot running…", expanded=True) as progress:
-        selected_count = 0
+    # ── Generate variants ──
+    var_texts: dict[str, str] = {}
+    for v in ("a", "b", "c"):
+        t = read_output(variant_path(cfg.output_path, info.chapter, info.scene, v))
+        if t:
+            var_texts[v] = t
 
-        for idx, info in enumerate(scenes):
-            if stopped:
-                break
-
-            locked = _is_locked(idx, scenes, db_statuses, cfg.output_path)
-            if locked:
-                progress.write(f"⏸ {info.scene_key}: prior scene incomplete — stopping.")
-                break
-
-            row = db_statuses.get(info.scene_key, {})
-            status = row.get("status", "needs_draft")
-
-            if status in ("selected", "assembled"):
-                progress.write(f"✓ {info.scene_key}: already complete.")
-                selected_count += 1
-                continue
-
-            if status == "needs_intervention":
-                progress.write(f"⚠ {info.scene_key}: awaiting manual intervention — stopping.")
-                stopped = True
-                break
-
-            progress.write(f"**{info.scene_key}**")
-
-            # ── Generate variants ──
-            var_texts: dict[str, str] = {}
-            for v in ("a", "b", "c"):
-                t = read_output(variant_path(cfg.output_path, info.chapter, info.scene, v))
-                if t:
-                    var_texts[v] = t
-
-            if len(var_texts) < 3:
-                progress.write("  Generating 3 draft variants…")
-                if not acquire_generation_lock(info.scene_key, username, "autopilot_draft"):
-                    progress.write("  ⚠ Scene locked by another user — stopping.")
-                    stopped = True
-                    break
-                try:
-                    system_prompt = build_system_prompt(info, cfg.output_path, scenes)
-                    user_prompt = read_prompt(info, "DRAFT_PROMPT")
-                    for v, temp in VARIANT_TEMPERATURES.items():
-                        progress.write(f"    Variant {v.upper()} (temp {temp:.2f})…")
-                        text = generate(
-                            cfg.ollama_url, cfg.model_name,
-                            system_prompt, user_prompt,
-                            temperature=temp, num_ctx=cfg.num_ctx,
-                        )
-                        write_output(variant_path(cfg.output_path, info.chapter, info.scene, v), text)
-                        var_texts[v] = text
-                except Exception as exc:
-                    progress.write(f"  ✕ Generation failed: {exc}")
-                    stopped = True
-                finally:
-                    release_generation_lock(info.scene_key)
-                if stopped:
-                    break
-                set_scene_status(info.scene_key, "has_variants", username)
-                progress.write("  3 variants generated.")
-
-            # ── Judge variants ──
-            variant = row.get("active_variant")
-            if not variant:
-                progress.write("  Judging variants…")
-                variant = _judge_best_variant(var_texts, cfg)
-                progress.write(f"  Variant {variant.upper()} selected as best.")
-                set_scene_status(info.scene_key, "has_variants", username, active_variant=variant)
-                db_statuses.setdefault(info.scene_key, {})["active_variant"] = variant
-
-            # ── Critique / revision loop ──
-            current_text = var_texts.get(variant) or ""
-            if not current_text:
-                vp = variant_path(cfg.output_path, info.chapter, info.scene, variant)
-                if vp.exists():
-                    current_text = vp.read_text(encoding="utf-8")
-            if not current_text:
-                progress.write(f"  ✕ No text for Variant {variant.upper()} — skipping.")
-                continue
-
-            passed = False
-            loop_count = row.get("loop_count") or 0
-
-            while loop_count < loop_limit:
-                progress.write(f"  Critique cycle {loop_count + 1}/{loop_limit}…")
-                if not acquire_generation_lock(info.scene_key, username, f"autopilot_crit_{loop_count}"):
-                    progress.write("  ⚠ Scene locked — stopping.")
-                    stopped = True
-                    break
-                try:
-                    sp = build_system_prompt(info, cfg.output_path, scenes)
-                    cu = build_critique_user_prompt(info, current_text)
-                    crit = generate(
-                        cfg.ollama_url, cfg.model_name, sp, cu,
-                        temperature=CRITIQUE_TEMPERATURE, num_ctx=cfg.num_ctx,
-                    )
-                    write_output(critique_path(cfg.output_path, info.chapter, info.scene, variant), crit)
-                except Exception as exc:
-                    progress.write(f"  ✕ Critique failed: {exc}")
-                    stopped = True
-                finally:
-                    release_generation_lock(info.scene_key)
-                if stopped:
-                    break
-
-                set_scene_status(info.scene_key, "has_critique", username,
-                                 active_variant=variant, loop_count=loop_count)
-                critique_passed, fixes = parse_critique_verdict(crit)
-
-                if critique_passed:
-                    progress.write("  ✓ Critique passed — auto-selecting.")
-                    dest = selected_path(cfg.output_path, info.chapter, info.scene)
-                    write_output(dest, current_text)
-                    set_scene_status(info.scene_key, "selected", username,
-                                     active_variant=variant, loop_count=loop_count)
-                    db_statuses.setdefault(info.scene_key, {})["status"] = "selected"
-                    st.toast(f"{info.scene_key} auto-selected.", icon="✅")
-                    passed = True
-                    selected_count += 1
-                    break
-
-                fixes_preview = "; ".join(fixes[:2]) if fixes else "see critique"
-                progress.write(f"  Critique failed: {fixes_preview}")
-                progress.write("  Generating revision…")
-
-                if not acquire_generation_lock(info.scene_key, username, f"autopilot_rev_{loop_count}"):
-                    progress.write("  ⚠ Scene locked — stopping.")
-                    stopped = True
-                    break
-                try:
-                    sp = build_system_prompt(info, cfg.output_path, scenes)
-                    ru = build_revision_user_prompt(info, current_text, crit)
-                    rev = generate(
-                        cfg.ollama_url, cfg.model_name, sp, ru,
-                        temperature=REVISION_TEMPERATURE, num_ctx=cfg.num_ctx,
-                    )
-                    write_output(revision_path(cfg.output_path, info.chapter, info.scene, variant), rev)
-                except Exception as exc:
-                    progress.write(f"  ✕ Revision failed: {exc}")
-                    stopped = True
-                finally:
-                    release_generation_lock(info.scene_key)
-                if stopped:
-                    break
-
-                set_scene_status(info.scene_key, "has_revision", username,
-                                 active_variant=variant, loop_count=loop_count + 1)
-                current_text = rev
-                loop_count += 1
-
-            if stopped:
-                break
-
-            if not passed:
-                progress.write(f"  ⚠ Loop limit ({loop_limit}) reached — manual review required.")
-                set_scene_status(info.scene_key, "needs_intervention", username,
-                                 active_variant=variant, loop_count=loop_count)
-                db_statuses.setdefault(info.scene_key, {})["status"] = "needs_intervention"
-                st.toast(f"{info.scene_key} needs your attention.", icon="⚠️")
-                stopped = True
-
+    if len(var_texts) < 3:
+        _log("  Generating 3 draft variants…")
+        if not acquire_generation_lock(info.scene_key, username, "autopilot_draft"):
+            _log("  ⚠ Scene locked by another user — stopping.")
+            return log, True, False
+        try:
+            system_prompt = build_system_prompt(info, cfg.output_path, scenes)
+            user_prompt = read_prompt(info, "DRAFT_PROMPT")
+            for v, temp in VARIANT_TEMPERATURES.items():
+                _log(f"    Variant {v.upper()} (temp {temp:.2f})…")
+                text = generate(
+                    cfg.ollama_url, cfg.model_name,
+                    system_prompt, user_prompt,
+                    temperature=temp, num_ctx=cfg.num_ctx,
+                )
+                write_output(variant_path(cfg.output_path, info.chapter, info.scene, v), text)
+                var_texts[v] = text
+        except Exception as exc:
+            _log(f"  ✕ Generation failed: {exc}")
+            stopped = True
+        finally:
+            release_generation_lock(info.scene_key)
         if stopped:
-            progress.update(label="Auto-pilot paused — manual review required.", state="error")
-        else:
-            progress.update(
-                label=f"Auto-pilot complete — {selected_count} scene(s) selected.",
-                state="complete",
-            )
+            return log, True, False
+        set_scene_status(info.scene_key, "has_variants", username)
+        _log("  3 variants generated.")
 
-    st.cache_data.clear()
-    st.session_state.autopilot_running = False
-    if not stopped:
-        st.toast("Auto-pilot finished.", icon="✅")
-    st.rerun()
+    # ── Judge variants ──
+    variant = row.get("active_variant")
+    if not variant:
+        _log("  Judging variants…")
+        variant = _judge_best_variant(var_texts, cfg)
+        _log(f"  Variant {variant.upper()} selected as best.")
+        set_scene_status(info.scene_key, "has_variants", username, active_variant=variant)
+
+    # ── Critique / revision loop ──
+    current_text = var_texts.get(variant) or ""
+    if not current_text:
+        vp = variant_path(cfg.output_path, info.chapter, info.scene, variant)
+        if vp.exists():
+            current_text = vp.read_text(encoding="utf-8")
+    if not current_text:
+        _log(f"  ✕ No text for Variant {variant.upper()} — skipping.")
+        return log, False, False
+
+    passed = False
+    loop_count = row.get("loop_count") or 0
+
+    while loop_count < loop_limit:
+        _log(f"  Critique cycle {loop_count + 1}/{loop_limit}…")
+        if not acquire_generation_lock(info.scene_key, username, f"autopilot_crit_{loop_count}"):
+            _log("  ⚠ Scene locked — stopping.")
+            return log, True, False
+        try:
+            sp = build_system_prompt(info, cfg.output_path, scenes)
+            cu = build_critique_user_prompt(info, current_text)
+            crit = generate(
+                cfg.ollama_url, cfg.model_name, sp, cu,
+                temperature=CRITIQUE_TEMPERATURE, num_ctx=cfg.num_ctx,
+            )
+            write_output(critique_path(cfg.output_path, info.chapter, info.scene, variant), crit)
+        except Exception as exc:
+            _log(f"  ✕ Critique failed: {exc}")
+            stopped = True
+        finally:
+            release_generation_lock(info.scene_key)
+        if stopped:
+            return log, True, False
+
+        set_scene_status(info.scene_key, "has_critique", username,
+                         active_variant=variant, loop_count=loop_count)
+        critique_passed, fixes = parse_critique_verdict(crit)
+
+        if critique_passed:
+            _log("  ✓ Critique passed — auto-selecting.")
+            dest = selected_path(cfg.output_path, info.chapter, info.scene)
+            write_output(dest, current_text)
+            set_scene_status(info.scene_key, "selected", username,
+                             active_variant=variant, loop_count=loop_count)
+            st.toast(f"{info.scene_key} auto-selected.", icon="✅")
+            passed = True
+            break
+
+        fixes_preview = "; ".join(fixes[:2]) if fixes else "see critique"
+        _log(f"  Critique: {fixes_preview}")
+        _log("  Generating revision…")
+
+        if not acquire_generation_lock(info.scene_key, username, f"autopilot_rev_{loop_count}"):
+            _log("  ⚠ Scene locked — stopping.")
+            return log, True, False
+        try:
+            sp = build_system_prompt(info, cfg.output_path, scenes)
+            ru = build_revision_user_prompt(info, current_text, crit)
+            rev = generate(
+                cfg.ollama_url, cfg.model_name, sp, ru,
+                temperature=REVISION_TEMPERATURE, num_ctx=cfg.num_ctx,
+            )
+            write_output(revision_path(cfg.output_path, info.chapter, info.scene, variant), rev)
+        except Exception as exc:
+            _log(f"  ✕ Revision failed: {exc}")
+            stopped = True
+        finally:
+            release_generation_lock(info.scene_key)
+        if stopped:
+            return log, True, False
+
+        set_scene_status(info.scene_key, "has_revision", username,
+                         active_variant=variant, loop_count=loop_count + 1)
+        current_text = rev
+        loop_count += 1
+
+    if not passed:
+        _log(f"  ⚠ Loop limit ({loop_limit}) reached — manual review required.")
+        set_scene_status(info.scene_key, "needs_intervention", username,
+                         active_variant=variant, loop_count=loop_count)
+        st.toast(f"{info.scene_key} needs your attention.", icon="⚠️")
+        return log, True, False
+
+    return log, False, True
+
+
+def _render_autopilot_log(log_lines: list[str]) -> None:
+    """Render accumulated log in a fixed-height scrollable box."""
+    def _line_html(line: str) -> str:
+        # Lines have format "HH:MM  message"; split the timestamp for separate styling
+        if len(line) >= 5 and line[2] == ":" and line[4:6] == "  ":
+            ts = html.escape(line[:5])
+            msg = html.escape(line[6:])
+            return (
+                f'<div class="autopilot-log-line">'
+                f'<span class="log-ts">{ts}</span> {msg}'
+                f'</div>'
+            )
+        return f'<div class="autopilot-log-line">{html.escape(line)}</div>'
+
+    lines_html = "".join(_line_html(line) for line in log_lines)
+    st.markdown(
+        f'<div class="autopilot-log" id="autopilot-log">{lines_html}</div>'
+        '<script>'
+        'var el=document.getElementById("autopilot-log");'
+        'if(el){el.scrollTop=el.scrollHeight;}'
+        '</script>',
+        unsafe_allow_html=True,
+    )
+
+
+def _render_autopilot_page(scenes: list, cfg, db_statuses: dict) -> None:
+    """Scene-at-a-time autopilot runner with stop button and scrollable log."""
+    username = st.session_state.username
+    loop_limit = st.session_state.get("autopilot_loop_limit_val", cfg.autopilot_loop_limit)
+
+    # Init per-run state
+    if "autopilot_scene_idx" not in st.session_state:
+        st.session_state.autopilot_scene_idx = 0
+    if "autopilot_log" not in st.session_state:
+        st.session_state.autopilot_log = []
+    if "autopilot_selected_count" not in st.session_state:
+        st.session_state.autopilot_selected_count = 0
+
+    scene_idx: int = st.session_state.autopilot_scene_idx
+    stop_requested: bool = st.session_state.get("autopilot_stop_requested", False)
+    done = stop_requested or scene_idx >= len(scenes)
+
+    # ── Header + stop button ──
+    st.markdown(
+        page_header("Auto-pilot", "Processing all unlocked scenes sequentially."),
+        unsafe_allow_html=True,
+    )
+    col_stop, _ = st.columns([1, 6])
+    with col_stop:
+        if not done:
+            if st.button("⬛ Stop", key="autopilot_stop_btn"):
+                st.session_state.autopilot_stop_requested = True
+                st.rerun()
+
+    # ── Log ──
+    _render_autopilot_log(st.session_state.autopilot_log)
+
+    if done:
+        # Finalise
+        selected = st.session_state.autopilot_selected_count
+        if stop_requested:
+            st.markdown(info_banner("Auto-pilot stopped by user.", kind="warning"), unsafe_allow_html=True)
+        else:
+            st.markdown(
+                info_banner(f"Auto-pilot complete — {selected} scene(s) selected.", kind="info"),
+                unsafe_allow_html=True,
+            )
+            st.toast("Auto-pilot finished.", icon="✅")
+        # Clean up state
+        for k in ("autopilot_scene_idx", "autopilot_log", "autopilot_selected_count", "autopilot_stop_requested"):
+            st.session_state.pop(k, None)
+        st.session_state.autopilot_running = False
+        st.cache_data.clear()
+        st.rerun()
+    else:
+        # Process next scene
+        info = scenes[scene_idx]
+        with st.spinner(f"Processing {info.scene_key} ({scene_idx + 1}/{len(scenes)})…"):
+            log_entries, should_stop, was_selected = _process_one_scene(
+                info, scene_idx, scenes, cfg, db_statuses, username, loop_limit,
+            )
+        st.session_state.autopilot_log.extend(log_entries)
+        st.session_state.autopilot_scene_idx = scene_idx + 1
+        if was_selected:
+            st.session_state.autopilot_selected_count += 1
+        if should_stop:
+            st.session_state.autopilot_stop_requested = True
+        st.rerun()
 
 
 # ── Scene picker (sidebar) ────────────────────────────────────────────────────
@@ -1075,15 +1146,7 @@ _render_scene_picker(scenes, cfg, db_statuses)
 # ── Auto-pilot mode ───────────────────────────────────────────────────────────
 
 if st.session_state.get("autopilot_running"):
-    st.markdown(
-        page_header("Auto-pilot", "Processing all unlocked scenes sequentially."),
-        unsafe_allow_html=True,
-    )
-    _run_autopilot(
-        scenes, cfg, db_statuses,
-        username=st.session_state.username,
-        loop_limit=st.session_state.get("autopilot_loop_limit_val", cfg.autopilot_loop_limit),
-    )
+    _render_autopilot_page(scenes, cfg, db_statuses)
     st.stop()
 
 # ── Normal pipeline view ──────────────────────────────────────────────────────

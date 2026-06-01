@@ -933,14 +933,17 @@ hr {
 .reader-paragraph.edited {
     border-left-color: var(--gold-muted);
 }
-/* Action bar — always rendered, subtle by default */
+/* Action bar — hidden until paragraph is clicked */
 .reader-action-bar {
-    display: flex;
+    display: none;
     gap: 0.375rem;
     padding: 0 0.875rem 0.5rem;
 }
+.reader-action-bar.para-open {
+    display: flex !important;
+}
 .reader-action-bar .stButton > button {
-    opacity: 0.22 !important;
+    opacity: 1 !important;
     font-size: 0.625rem !important;
     padding: 1px 7px !important;
     border-radius: var(--radius-pill) !important;
@@ -951,12 +954,11 @@ hr {
     letter-spacing: 0.06em !important;
     min-height: unset !important;
     line-height: 1.6 !important;
-    transition: opacity var(--transition-fast), border-color var(--transition-fast),
+    transition: border-color var(--transition-fast),
                 color var(--transition-fast), background var(--transition-fast) !important;
     transform: none !important;
 }
 .reader-action-bar .stButton > button:hover {
-    opacity: 1 !important;
     border-color: var(--border-strong) !important;
     color: var(--text-primary) !important;
     background: var(--bg-elevated) !important;
@@ -1012,6 +1014,33 @@ hr {
     letter-spacing: 0.02em;
     display: block;
     margin-bottom: 0.375rem;
+}
+
+/* ── Auto-pilot log ──────────────────────────────────────────────────────── */
+.autopilot-log {
+    height: 360px;
+    overflow-y: auto;
+    background: var(--bg-inset);
+    border: 1px solid var(--border-medium);
+    border-radius: var(--radius-md);
+    padding: 0.75rem 1rem;
+    font-family: var(--font-ui);
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+    margin: 0.75rem 0 1.25rem;
+    scroll-behavior: smooth;
+}
+.autopilot-log-line {
+    padding: 0.1rem 0;
+    white-space: pre-wrap;
+    line-height: 1.6;
+}
+.log-ts {
+    font-variant-numeric: tabular-nums;
+    color: var(--text-muted);
+    font-size: 0.75em;
+    letter-spacing: 0.03em;
+    user-select: none;
 }
 
 /* ── Pipeline step indicator ─────────────────────────────────────────────── */

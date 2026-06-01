@@ -46,6 +46,77 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+# Paragraph interaction: show action bar on click or text selection
+st.markdown(
+    """<script>
+(function () {
+  'use strict';
+  if (window.__readerSetup) return;
+  window.__readerSetup = true;
+
+  function showBar(pid) {
+    document.querySelectorAll('.reader-action-bar:not(.para-open)').forEach(function (b) {
+      b.style.display = 'none';
+    });
+    var bar = document.querySelector('.reader-action-bar[data-para-id="' + pid + '"]');
+    if (bar) bar.style.display = 'flex';
+  }
+
+  function hideAll() {
+    document.querySelectorAll('.reader-action-bar:not(.para-open)').forEach(function (b) {
+      b.style.display = 'none';
+    });
+  }
+
+  function setupParas() {
+    document.querySelectorAll('.reader-paragraph:not([data-rl])').forEach(function (para) {
+      para.setAttribute('data-rl', '1');
+      para.style.cursor = 'text';
+      para.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var pid = this.getAttribute('data-para-id');
+        if (!pid) return;
+        var bar = document.querySelector('.reader-action-bar[data-para-id="' + pid + '"]');
+        if (!bar) return;
+        if (bar.classList.contains('para-open')) return;
+        if (bar.style.display === 'flex') { hideAll(); } else { showBar(pid); }
+      });
+    });
+  }
+
+  document.addEventListener('mouseup', function () {
+    var sel = window.getSelection();
+    if (!sel || sel.isCollapsed || !sel.toString().trim()) return;
+    try {
+      var range = sel.getRangeAt(0);
+      var node = range.commonAncestorContainer;
+      var el = node.nodeType === 3 ? node.parentElement : node;
+      var para = el.closest('.reader-paragraph');
+      if (!para) return;
+      var pid = para.getAttribute('data-para-id');
+      if (pid) showBar(pid);
+    } catch (_) {}
+  });
+
+  document.addEventListener('click', function (e) {
+    if (!e.target.closest('.reader-paragraph') &&
+        !e.target.closest('.reader-action-bar') &&
+        !e.target.closest('.reader-action-open')) {
+      hideAll();
+    }
+  });
+
+  var obs = new MutationObserver(function () {
+    clearTimeout(window.__readerSetupT);
+    window.__readerSetupT = setTimeout(setupParas, 80);
+  });
+  obs.observe(document.body, { childList: true, subtree: true });
+  setupParas();
+})();
+</script>""",
+    unsafe_allow_html=True,
+)
+
 init_db()
 
 if "username" not in st.session_state:
@@ -172,75 +243,78 @@ def _render_paragraph(block: ContentBlock, para_idx: int, para_text: str, edit_h
 
     is_edited = (key, para_idx) in edit_history_keys
     edited_class = " edited" if is_edited else ""
+    para_id = f"{key}_{para_idx}"
+    action_bar_class = " para-open" if is_open else ""
 
-    # ── Paragraph prose ──
-    st.markdown(
-        f'<div class="reader-para-block">'
-        f'<div class="reader-paragraph{edited_class}">{html.escape(para_text)}</div>'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
-
-    # ── Action bar ──
-    st.markdown('<div class="reader-action-bar">', unsafe_allow_html=True)
-    col_c, col_ai, col_e, col_rest = st.columns([1, 1, 1, 8])
-    with col_c:
-        st.markdown('<div class="reader-action-bar-comment">', unsafe_allow_html=True)
-        if st.button("✦ Note", key=f"btn_c_{key}_{para_idx}"):
-            if is_open and open_action == "comment":
-                st.session_state.reader_open = None
-            else:
-                st.session_state.reader_open = (key, para_idx, "comment")
-                st.session_state.reader_ai_pending = None
-            st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
-    with col_ai:
-        st.markdown('<div class="reader-action-bar-ai">', unsafe_allow_html=True)
-        if st.button("✧ AI", key=f"btn_ai_{key}_{para_idx}"):
-            if is_open and open_action == "ai_prompt":
-                st.session_state.reader_open = None
-                st.session_state.reader_ai_pending = None
-            else:
-                st.session_state.reader_open = (key, para_idx, "ai_prompt")
-                st.session_state.reader_ai_pending = None
-            st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
-    with col_e:
-        st.markdown('<div class="reader-action-bar-edit">', unsafe_allow_html=True)
-        if st.button("✎ Edit", key=f"btn_e_{key}_{para_idx}"):
-            if is_open and open_action == "edit":
-                st.session_state.reader_open = None
-            else:
-                st.session_state.reader_open = (key, para_idx, "edit")
-                st.session_state.reader_ai_pending = None
-            st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    # ── Comments ──
-    para_comments = get_comments(key, paragraph_index=para_idx)
-    for c in para_comments:
+    with st.container():
+        # ── Paragraph prose ──
         st.markdown(
-            comment_annotation(
-                c["username"],
-                c["content"],
-                c["comment_type"],
-                c["created_at"][:16],
-            ),
+            f'<div class="reader-para-block">'
+            f'<div class="reader-paragraph{edited_class}" data-para-id="{para_id}">{html.escape(para_text)}</div>'
+            f'</div>',
             unsafe_allow_html=True,
         )
 
-    # ── Active action form ──
-    if not is_open:
-        return
+        # ── Action bar (hidden by default; shown on click/selection via JS, or always when para-open) ──
+        st.markdown(f'<div class="reader-action-bar{action_bar_class}" data-para-id="{para_id}">', unsafe_allow_html=True)
+        col_c, col_ai, col_e, col_rest = st.columns([1, 1, 1, 8])
+        with col_c:
+            st.markdown('<div class="reader-action-bar-comment">', unsafe_allow_html=True)
+            if st.button("✦ Note", key=f"btn_c_{key}_{para_idx}"):
+                if is_open and open_action == "comment":
+                    st.session_state.reader_open = None
+                else:
+                    st.session_state.reader_open = (key, para_idx, "comment")
+                    st.session_state.reader_ai_pending = None
+                st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
+        with col_ai:
+            st.markdown('<div class="reader-action-bar-ai">', unsafe_allow_html=True)
+            if st.button("✧ AI", key=f"btn_ai_{key}_{para_idx}"):
+                if is_open and open_action == "ai_prompt":
+                    st.session_state.reader_open = None
+                    st.session_state.reader_ai_pending = None
+                else:
+                    st.session_state.reader_open = (key, para_idx, "ai_prompt")
+                    st.session_state.reader_ai_pending = None
+                st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
+        with col_e:
+            st.markdown('<div class="reader-action-bar-edit">', unsafe_allow_html=True)
+            if st.button("✎ Edit", key=f"btn_e_{key}_{para_idx}"):
+                if is_open and open_action == "edit":
+                    st.session_state.reader_open = None
+                else:
+                    st.session_state.reader_open = (key, para_idx, "edit")
+                    st.session_state.reader_ai_pending = None
+                st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
 
-    with st.container():
-        if open_action == "comment":
-            _render_comment_form(key, para_idx)
-        elif open_action == "ai_prompt":
-            _render_ai_form(block, para_idx, para_text)
-        elif open_action == "edit":
-            _render_edit_form(block, para_idx, para_text)
+        # ── Comments ──
+        para_comments = get_comments(key, paragraph_index=para_idx)
+        for c in para_comments:
+            st.markdown(
+                comment_annotation(
+                    c["username"],
+                    c["content"],
+                    c["comment_type"],
+                    c["created_at"][:16],
+                ),
+                unsafe_allow_html=True,
+            )
+
+        # ── Active action form ──
+        if not is_open:
+            return
+
+        with st.container():
+            if open_action == "comment":
+                _render_comment_form(key, para_idx)
+            elif open_action == "ai_prompt":
+                _render_ai_form(block, para_idx, para_text)
+            elif open_action == "edit":
+                _render_edit_form(block, para_idx, para_text)
 
 
 def _render_comment_form(content_key: str, para_idx: int) -> None:
