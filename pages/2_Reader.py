@@ -49,7 +49,7 @@ st.markdown(
     "max-width: min(74ch, 100%); "
     "padding-left: clamp(0.75rem, 4vw, 3rem); "
     "padding-right: clamp(0.75rem, 4vw, 3rem); "
-    "}</style>",
+    "} [data-testid='stIframe'] { margin: 0 !important; }</style>",
     unsafe_allow_html=True,
 )
 
@@ -151,7 +151,7 @@ st.iframe("""<script>
   obs.observe(doc.body, { childList: true, subtree: true });
   setupParas();
 })();
-</script>""", height=0)
+</script>""", height=1)
 
 init_db()
 init_session()
