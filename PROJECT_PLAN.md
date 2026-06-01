@@ -57,13 +57,14 @@ The Scriptorium is a premium, collaborative prose generation studio. Every inter
 *The visual foundation. Every subsequent page builds on this layer.*
 
 **Deliverables:**
-- [ ] `styles/theme.py` — CSS string constants: color palette, typography, spacing, animations
-- [ ] `styles/components.py` — Python functions that return styled HTML strings for reusable components (cards, badges, status pills, dividers, progress bars)
-- [ ] Global CSS injected via `st.markdown(..., unsafe_allow_html=True)` on every page load
-- [ ] Base layout established: sidebar navigation, page header, content area
-- [ ] Settings page (`pages/settings.py`) — functional, validated, styled
-- [ ] Username prompt modal on first visit
-- [ ] "Ollama status" indicator in sidebar (green/red based on connectivity ping)
+- [x] `styles/theme.py` — CSS string constants: color palette, typography, spacing, animations
+- [x] `styles/components.py` — Python functions that return styled HTML strings for reusable components (cards, badges, status pills, dividers, progress bars)
+- [x] Global CSS injected via `st.markdown(..., unsafe_allow_html=True)` on every page load
+- [x] Base layout established: sidebar navigation, page header, content area
+- [x] Settings page (`pages/3_Settings.py`) — functional, validated, styled
+- [x] Username prompt modal on first visit
+- [x] "Ollama status" indicator in sidebar (green/red based on connectivity ping)
+- [x] `.streamlit/config.toml` — `primaryColor=#C9A84C`, dark theme tokens registered at the Streamlit level
 
 **Design Language:**
 - Gothic scholarly aesthetic: deep dark backgrounds, aged-parchment text, gold accents, subtle grain texture via CSS
