@@ -588,19 +588,21 @@ def _render_scene_picker(scenes, cfg, db_statuses: dict) -> None:
         # ── Auto-pilot controls ──
         st.markdown('<div class="nav-section-label">Auto-pilot</div>', unsafe_allow_html=True)
 
-        # Load prefs once per session (cleared on hard refresh — exactly when we want to restore)
+        # Load prefs once per session (cleared on hard refresh — exactly when we want to restore).
+        # Both keys are set together so neither widget needs a value= argument.
         if "autopilot_enabled" not in st.session_state:
             _prefs = load_prefs(st.session_state.username)
             st.session_state.autopilot_enabled = _prefs.autopilot_enabled
             st.session_state.autopilot_loop_limit_val = _prefs.autopilot_loop_limit
             if "pipeline_scene" not in st.session_state and _prefs.last_pipeline_scene:
                 st.session_state.pipeline_scene = _prefs.last_pipeline_scene
+        elif "autopilot_loop_limit_val" not in st.session_state:
+            st.session_state.autopilot_loop_limit_val = cfg.autopilot_loop_limit
 
         st.checkbox("Enabled", key="autopilot_enabled", on_change=_save_autopilot_prefs)
         st.number_input(
             "Max revision cycles",
             min_value=1, max_value=10,
-            value=cfg.autopilot_loop_limit,
             step=1,
             key="autopilot_loop_limit_val",
             on_change=_save_autopilot_prefs,
