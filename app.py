@@ -11,7 +11,6 @@ from scene_manager import (
     discover_scenes,
     scenes_for_chapter,
     selected_path,
-    split_paragraphs,
     status_from_files,
 )
 from styles.components import (

@@ -1115,6 +1115,31 @@ hr {
     color: #E08080 !important;
 }
 
+/* ── Comment remove button ───────────────────────────────────────────────── */
+/* Targets the trailing column of any row that contains a comment annotation. */
+[data-testid="stHorizontalBlock"]:has(.comment-annotation) [data-testid="stColumn"]:last-child .stButton > button {
+    font-size: 0.625rem !important;
+    padding: 0 6px !important;
+    min-height: 20px !important;
+    line-height: 1.5 !important;
+    height: 20px !important;
+    border-radius: var(--radius-pill) !important;
+    color: var(--text-muted) !important;
+    border-color: transparent !important;
+    background: transparent !important;
+    transform: none !important;
+    box-shadow: none !important;
+    margin-top: 0.5rem !important;
+    letter-spacing: 0 !important;
+}
+[data-testid="stHorizontalBlock"]:has(.comment-annotation) [data-testid="stColumn"]:last-child .stButton > button:hover {
+    color: #C87070 !important;
+    background: rgba(74,26,36,0.2) !important;
+    border-color: rgba(107,42,53,0.4) !important;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
 /* ── Intervention banner ──────────────────────────────────────────────────── */
 .intervention-banner {
     background: rgba(74,26,36,0.2);
@@ -1149,6 +1174,123 @@ hr {
 .intervention-banner .int-fix-bullet {
     color: #C87070;
     flex-shrink: 0;
+}
+
+/* ── Responsive / Mobile ─────────────────────────────────────────────────── */
+
+/* Tablet (≤768px) --------------------------------------------------------- */
+@media (max-width: 768px) {
+    .main .block-container {
+        padding-left: 1.25rem !important;
+        padding-right: 1.25rem !important;
+        padding-top: 1.5rem !important;
+        padding-bottom: 3rem !important;
+    }
+
+    /* Diff view: stack columns */
+    .diff-container {
+        grid-template-columns: 1fr !important;
+        gap: 1rem !important;
+    }
+
+    /* Step indicator: smaller dots */
+    .step-dot  { width: 24px !important; height: 24px !important; font-size: 0.625rem !important; }
+    .step-item { min-width: 52px !important; }
+    .step-label { font-size: 0.5rem !important; }
+
+    /* Reduce card padding */
+    .prose-card   { padding: 1.25rem !important; }
+    .critique-card { padding: 1rem 1.25rem !important; }
+}
+
+/* Phone (≤576px) ---------------------------------------------------------- */
+@media (max-width: 576px) {
+    .main .block-container {
+        padding-left: 0.75rem !important;
+        padding-right: 0.75rem !important;
+        padding-top: 1rem !important;
+    }
+
+    /* Force all column blocks to stack to full width */
+    .main [data-testid="stHorizontalBlock"] {
+        flex-wrap: wrap !important;
+        gap: 0.5rem !important;
+    }
+    .main [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+        width: 100% !important;
+        min-width: 100% !important;
+        flex: 1 1 100% !important;
+    }
+
+    /* Exception: reader action bar stays horizontal */
+    .main .reader-action-bar-buttons [data-testid="stHorizontalBlock"] {
+        flex-wrap: nowrap !important;
+        gap: 0.25rem !important;
+    }
+    .main .reader-action-bar-buttons [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+        flex: 0 0 auto !important;
+        min-width: auto !important;
+        width: auto !important;
+    }
+    /* Hide the spacer column in the action bar */
+    .main .reader-action-bar-buttons [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:last-child {
+        display: none !important;
+    }
+    /* Larger touch targets for action buttons */
+    .reader-action-bar-buttons .stButton > button {
+        font-size: 0.75rem !important;
+        padding: 5px 12px !important;
+        min-height: 36px !important;
+    }
+
+    /* Exception: comment rows stay side-by-side (note left, × right) */
+    .main [data-testid="stHorizontalBlock"]:has(.comment-annotation) {
+        flex-wrap: nowrap !important;
+    }
+    .main [data-testid="stHorizontalBlock"]:has(.comment-annotation) > [data-testid="stColumn"] {
+        flex: 0 0 auto !important;
+        min-width: auto !important;
+        width: auto !important;
+    }
+    .main [data-testid="stHorizontalBlock"]:has(.comment-annotation) > [data-testid="stColumn"]:first-child {
+        flex: 1 1 auto !important;
+    }
+
+    /* Step indicator: allow horizontal scroll rather than breaking layout */
+    .step-indicator {
+        overflow-x: auto !important;
+        flex-wrap: nowrap !important;
+        padding-bottom: 0.5rem !important;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    /* Page title */
+    .page-header .page-title { font-size: 1.5rem !important; }
+
+    /* Reader typography */
+    .reader-paragraph      { font-size: 1rem !important; line-height: 1.8 !important; }
+    .reader-chapter-heading { font-size: 1.75rem !important; }
+
+    /* Stat card */
+    .stat-card           { padding: 1rem !important; }
+    .stat-card .stat-value { font-size: 1.75rem !important; }
+
+    /* Cards */
+    .prose-card    { padding: 1rem !important; }
+    .settings-section { padding: 1rem !important; }
+
+    /* Info banner */
+    .info-banner { font-size: 0.8125rem !important; }
+
+    /* Minimum touch target for all buttons */
+    .stButton > button,
+    [data-testid^="baseButton"] {
+        min-height: 40px !important;
+    }
+
+    /* Username entry screen */
+    .username-screen              { padding-top: 2rem !important; }
+    .username-screen .logo-mark   { font-size: 2.25rem !important; }
 }
 </style>
 """

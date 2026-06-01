@@ -11,7 +11,7 @@ import streamlit as st
 from _sidebar import render as render_sidebar
 from config import load_config, validate_config
 from session import init_session, sync_session
-from user_prefs import UserPrefs, load_prefs, save_prefs
+from user_prefs import load_prefs, save_prefs
 from database import (
     acquire_generation_lock,
     get_all_scene_statuses,
@@ -43,7 +43,6 @@ from scene_manager import (
     write_output,
 )
 from styles.components import (
-    chapter_progress_bar,
     critique_card,
     diff_view,
     info_banner,

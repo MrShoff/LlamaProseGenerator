@@ -13,7 +13,9 @@ from database import (
     add_comment,
     add_edit,
     get_comments,
+    get_edit_history,
     init_db,
+    resolve_comment,
 )
 from ollama_client import check_connectivity, generate
 from scene_manager import (
@@ -41,9 +43,13 @@ st.set_page_config(
 
 inject_styles()
 
-# Narrow the content column to a comfortable reading measure
+# Reading measure: 74ch on wide screens, full-width + tight padding on mobile.
 st.markdown(
-    "<style>.main .block-container { max-width: 74ch; padding-left: 3rem; padding-right: 3rem; }</style>",
+    "<style>.main .block-container { "
+    "max-width: min(74ch, 100%); "
+    "padding-left: clamp(0.75rem, 4vw, 3rem); "
+    "padding-right: clamp(0.75rem, 4vw, 3rem); "
+    "}</style>",
     unsafe_allow_html=True,
 )
 
@@ -320,15 +326,21 @@ def _render_paragraph(block: ContentBlock, para_idx: int, para_text: str, edit_h
         # ── Comments ──
         para_comments = get_comments(key, paragraph_index=para_idx)
         for c in para_comments:
-            st.markdown(
-                comment_annotation(
-                    c["username"],
-                    c["content"],
-                    c["comment_type"],
-                    c["created_at"][:16],
-                ),
-                unsafe_allow_html=True,
-            )
+            col_ann, col_del = st.columns([11, 1])
+            with col_ann:
+                st.markdown(
+                    comment_annotation(
+                        c["username"],
+                        c["content"],
+                        c["comment_type"],
+                        c["created_at"][:16],
+                    ),
+                    unsafe_allow_html=True,
+                )
+            with col_del:
+                if st.button("×", key=f"rmv_{c['id']}", help="Remove note"):
+                    resolve_comment(c["id"])
+                    st.rerun()
 
         # ── Active action form ──
         if not is_open:
@@ -550,7 +562,6 @@ blocks = [_block_from_dict(d) for d in raw_blocks]
 _render_chapter_nav(blocks)
 
 # Load edit history keys for the "edited" paragraph indicator
-from database import get_edit_history
 edit_keys: set[tuple[str, int]] = set()
 for b in blocks:
     for edit in get_edit_history(b.content_key):
@@ -575,33 +586,29 @@ st.markdown(
 st.markdown('<hr style="margin:0 0 0.5rem;">', unsafe_allow_html=True)
 
 # ── Manuscript content ────────────────────────────────────────────────────────
+# Scenes within a chapter flow continuously — no scene labels or breaks.
+# The ornament divider only appears between chapters.
 prev_chapter: int | None = None
 
 for block in blocks:
-    # Chapter heading when chapter changes
     if block.chapter != prev_chapter:
+        if prev_chapter is not None:
+            st.markdown(ornament_divider(), unsafe_allow_html=True)
         prev_chapter = block.chapter
         st.markdown(
             f'<div class="reader-chapter-heading">Chapter {block.chapter:02d}</div>'
             f'<div class="reader-chapter-ornament">· · · ✦ · · ·</div>',
             unsafe_allow_html=True,
         )
-    elif block.scene is not None:
-        # Scene break within a chapter (when not assembled)
-        st.markdown(
-            f'<div class="reader-scene-label">Scene {block.scene:02d}</div>',
-            unsafe_allow_html=True,
-        )
 
     paragraphs = split_paragraphs(block.text)
-
     for para_idx, para_text in enumerate(paragraphs):
         if not para_text.strip():
             continue
         _render_paragraph(block, para_idx, para_text, edit_keys)
 
-    # Scene/chapter separator
-    st.markdown(ornament_divider(), unsafe_allow_html=True)
+# Ornament after the final chapter, before the footer
+st.markdown(ornament_divider(), unsafe_allow_html=True)
 
 # ── Progress footer ───────────────────────────────────────────────────────────
 target_lo, target_hi = 95_000, 115_000

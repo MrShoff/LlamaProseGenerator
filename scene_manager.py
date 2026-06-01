@@ -3,7 +3,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Sequence
 
 _DRAFT_RE = re.compile(r"CH(\d+)_SC(\d+)_DRAFT_PROMPT\.md$", re.IGNORECASE)
 

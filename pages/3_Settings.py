@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import streamlit as st
 
 from _sidebar import render as render_sidebar
@@ -50,7 +52,6 @@ output_path = st.text_input(
 )
 
 # Live directory validation
-from pathlib import Path
 prompts_ok = bool(prompts_path) and Path(prompts_path).is_dir()
 output_specified = bool(output_path)
 
