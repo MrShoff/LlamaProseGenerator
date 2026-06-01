@@ -963,13 +963,13 @@ hr {
     box-shadow: none !important;
 }
 /* AI button (2nd column) */
-.reader-action-bar-buttons [data-testid="stColumn"]:nth-child(2) .stButton > button:hover {
+.reader-action-bar-buttons [data-testid="stHorizontalBlock"] [data-testid="stColumn"]:nth-child(2) .stButton > button:hover {
     border-color: var(--rose-muted) !important;
     color: var(--rose) !important;
     background: var(--rose-glow) !important;
 }
 /* Edit button (3rd column) */
-.reader-action-bar-buttons [data-testid="stColumn"]:nth-child(3) .stButton > button:hover {
+.reader-action-bar-buttons [data-testid="stHorizontalBlock"] [data-testid="stColumn"]:nth-child(3) .stButton > button:hover {
     border-color: var(--gold-muted) !important;
     color: var(--gold) !important;
     background: var(--gold-subtle) !important;

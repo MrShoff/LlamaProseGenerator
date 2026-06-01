@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 from _sidebar import render as render_sidebar
 from config import load_config, validate_config
@@ -47,21 +48,23 @@ st.markdown(
 )
 
 # Paragraph interaction: show action bar on click or text selection.
-# Streamlit renders st.columns() as a [data-testid="stHorizontalBlock"] that is a
-# direct sibling of the paragraph's element-container inside the st.container() wrapper.
-# We target that element directly — the reader-action-bar div trick doesn't work because
-# Streamlit never nests its column elements inside an injected <div>.
-st.markdown(
-    """<script>
+# st.markdown(<script>) never executes because Streamlit uses React's
+# dangerouslySetInnerHTML which doesn't run injected script tags.
+# st.components.v1.html() renders in a real iframe where scripts execute;
+# window.parent gives same-origin access to the Streamlit page's DOM.
+components.html("""<script>
 (function () {
-  'use strict';
-  if (window.__readerSetup) return;
-  window.__readerSetup = true;
+  var win = window.parent;
+  var doc = win.document;
+
+  if (win.__readerSetup) return;
+  win.__readerSetup = true;
 
   var _active = null;
 
-  // Walk the direct children of the paragraph's stVerticalBlock container,
-  // returning the first stHorizontalBlock before any nested stVerticalBlock.
+  // Walk direct children of the paragraph's stVerticalBlock container.
+  // Buttons live in stLayoutWrapper > stHorizontalBlock > stColumn.
+  // Stop before any nested stVerticalBlock (form container when panel is open).
   function getButtons(para) {
     var container = para.closest('[data-testid="stVerticalBlock"]');
     if (!container) return null;
@@ -69,7 +72,7 @@ st.markdown(
     for (var i = 0; i < ch.length; i++) {
       var tid = ch[i].dataset && ch[i].dataset.testid;
       if (tid === 'stVerticalBlock') break;
-      if (tid === 'stHorizontalBlock') return ch[i];
+      if (tid === 'stLayoutWrapper') return ch[i];
     }
     return null;
   }
@@ -92,7 +95,7 @@ st.markdown(
   }
 
   function setupParas() {
-    document.querySelectorAll('.reader-paragraph:not([data-rl])').forEach(function (para) {
+    doc.querySelectorAll('.reader-paragraph:not([data-rl])').forEach(function (para) {
       para.setAttribute('data-rl', '1');
       var btns = getButtons(para);
       if (!btns) return;
@@ -115,8 +118,8 @@ st.markdown(
     });
   }
 
-  document.addEventListener('mouseup', function () {
-    var sel = window.getSelection();
+  doc.addEventListener('mouseup', function () {
+    var sel = win.getSelection();
     if (!sel || sel.isCollapsed || !sel.toString().trim()) return;
     try {
       var range = sel.getRangeAt(0);
@@ -127,24 +130,22 @@ st.markdown(
     } catch (_) {}
   });
 
-  document.addEventListener('click', function (e) {
+  doc.addEventListener('click', function (e) {
     if (!e.target.closest('.reader-paragraph') &&
-        !e.target.closest('[data-testid="stHorizontalBlock"]') &&
+        !e.target.closest('[data-testid="stLayoutWrapper"]') &&
         !e.target.closest('.reader-action-open')) {
       hideActive();
     }
   });
 
-  var obs = new MutationObserver(function () {
-    clearTimeout(window.__readerT);
-    window.__readerT = setTimeout(setupParas, 80);
+  var obs = new win.MutationObserver(function () {
+    clearTimeout(win.__readerT);
+    win.__readerT = setTimeout(setupParas, 80);
   });
-  obs.observe(document.body, { childList: true, subtree: true });
+  obs.observe(doc.body, { childList: true, subtree: true });
   setupParas();
 })();
-</script>""",
-    unsafe_allow_html=True,
-)
+</script>""", height=0)
 
 init_db()
 
