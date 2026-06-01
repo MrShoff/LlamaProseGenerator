@@ -1013,6 +1013,117 @@ hr {
     display: block;
     margin-bottom: 0.375rem;
 }
+
+/* ── Pipeline step indicator ─────────────────────────────────────────────── */
+.step-indicator {
+    display: flex;
+    align-items: center;
+    padding: 0.75rem 0 1rem;
+}
+.step-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.3rem;
+    min-width: 72px;
+}
+.step-dot {
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-ui);
+    font-size: 0.75rem;
+    font-weight: 600;
+    transition: all var(--transition-base);
+    flex-shrink: 0;
+}
+.step-label {
+    font-family: var(--font-ui);
+    font-size: 0.625rem;
+    font-weight: 500;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+.step-conn {
+    flex: 1;
+    height: 2px;
+    background: var(--border-medium);
+    margin-bottom: 1.1rem;
+    transition: background var(--transition-slow);
+    min-width: 16px;
+}
+.step-conn.done { background: var(--gold-muted); }
+.step-item.step-done .step-dot {
+    background: rgba(26,60,42,0.5);
+    border: 1px solid rgba(42,92,66,0.6);
+    color: #6DD5A0;
+}
+.step-item.step-done .step-label { color: var(--text-muted); }
+.step-item.step-active .step-dot {
+    background: var(--gold-subtle);
+    border: 2px solid var(--gold);
+    color: var(--gold);
+}
+.step-item.step-active .step-label { color: var(--gold); font-weight: 700; }
+.step-item.step-future .step-dot {
+    background: var(--bg-inset);
+    border: 1px solid var(--border-medium);
+    color: var(--text-muted);
+}
+.step-item.step-future .step-label { color: var(--text-muted); }
+
+/* ── Scene sidebar states ─────────────────────────────────────────────────── */
+.scene-complete .stButton > button {
+    color: #6DD5A0 !important;
+}
+.scene-complete.scene-active .stButton > button {
+    color: var(--gold) !important;
+}
+.scene-intervention .stButton > button {
+    color: #C87070 !important;
+    background: rgba(74,26,36,0.15) !important;
+}
+.scene-intervention .stButton > button:hover {
+    background: rgba(74,26,36,0.35) !important;
+    color: #E08080 !important;
+}
+
+/* ── Intervention banner ──────────────────────────────────────────────────── */
+.intervention-banner {
+    background: rgba(74,26,36,0.2);
+    border: 1px solid rgba(107,42,53,0.65);
+    border-left: 4px solid #C87070;
+    border-radius: var(--radius-md);
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.25rem;
+    animation: fadeIn var(--transition-base) ease both;
+}
+.intervention-banner .int-header {
+    font-family: var(--font-ui);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #C87070;
+    margin-bottom: 0.75rem;
+}
+.intervention-banner .int-fixes {
+    font-family: var(--font-ui);
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    line-height: 1.65;
+}
+.intervention-banner .int-fix-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    margin-bottom: 0.3rem;
+}
+.intervention-banner .int-fix-bullet {
+    color: #C87070;
+    flex-shrink: 0;
+}
 </style>
 """
 

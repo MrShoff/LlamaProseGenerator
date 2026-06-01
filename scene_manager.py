@@ -147,7 +147,56 @@ def build_system_prompt(
 
 def build_critique_user_prompt(info: SceneInfo, variant_text: str) -> str:
     critique_instructions = read_prompt(info, "CRITIQUE_PROMPT")
-    return f"{critique_instructions}\n\n---\nSCENE DRAFT:\n{variant_text}"
+    verdict_block = (
+        "\n\n---\nVERDICT REQUIRED:\n"
+        "After your critique, end your response with exactly one of:\n\n"
+        "VERDICT: PASS\n"
+        "VERDICT: FAIL\n\n"
+        "Use VERDICT: PASS only if the scene meets all major criteria with no critical issues.\n"
+        "Use VERDICT: FAIL if critical issues require revision, then immediately follow with:\n"
+        "REQUIRED FIXES:\n"
+        "- [specific issue 1]\n"
+        "- [specific issue 2]\n"
+        "(List only the critical fixes, not minor stylistic observations.)"
+    )
+    return f"{critique_instructions}{verdict_block}\n\n---\nSCENE DRAFT:\n{variant_text}"
+
+
+def parse_critique_verdict(critique_text: str) -> tuple[bool, list[str]]:
+    """Parse the structured VERDICT from a critique. Returns (passed, required_fixes)."""
+    match = re.search(r"VERDICT:\s*(PASS|FAIL)", critique_text, re.IGNORECASE)
+    if not match:
+        return False, ["No VERDICT found in critique — review manually."]
+    if match.group(1).upper() == "PASS":
+        return True, []
+    fixes_match = re.search(
+        r"REQUIRED FIXES:(.*?)(?:VERDICT:|$)", critique_text, re.DOTALL | re.IGNORECASE
+    )
+    if fixes_match:
+        fixes = [
+            ln.strip().lstrip("-•* ").strip()
+            for ln in fixes_match.group(1).splitlines()
+            if ln.strip().lstrip("-•* ").strip()
+        ]
+    else:
+        fixes = ["See critique for details."]
+    return False, fixes or ["See critique for details."]
+
+
+def build_judge_prompt(variant_texts: dict[str, str]) -> str:
+    """Prompt asking the model to pick the best variant. Expects a single-letter response."""
+    parts = [
+        f"--- VARIANT {v.upper()} ({len(text.split()):,} words) ---\n{text}"
+        for v, text in sorted(variant_texts.items())
+    ]
+    return (
+        "You are a senior literary editor. Read the scene variants below and select the one "
+        "that best achieves the scene's purpose: strongest narrative voice, most effective "
+        "pacing, most compelling prose, and best tonal consistency with the surrounding story.\n\n"
+        + "\n\n".join(parts)
+        + "\n\nRespond with ONLY a single uppercase letter — A, B, or C — for the best variant. "
+        "No explanation, no punctuation, no additional text. Just the letter."
+    )
 
 
 def build_revision_user_prompt(

@@ -180,39 +180,46 @@ The Scriptorium is a premium, collaborative prose generation studio. Every inter
 
 **Deliverables:**
 
-**Animations & Micro-interactions:**
-- [ ] Scene status badge transitions animate on update
-- [ ] Generation progress uses an animated token-counter (estimated tokens generated)
-- [ ] Page transitions use a subtle fade
-- [ ] Toast notifications for all significant actions (generation complete, file saved, chapter assembled)
-- [ ] Skeleton loaders while data is fetching
+**Pipeline UX (post-test-run feedback):**
+- [x] Step machine replaces st.tabs — step state stored in session_state, programmable navigation
+- [x] All action buttons (Generate, Run Critique, Generate Revision, Select) rendered ABOVE the text
+- [x] "Proceed to Critique" / "Proceed to Revision" / "Proceed to Select" buttons auto-navigate to the correct step
+- [x] Scene completion clearly visible in sidebar: ✓ (gold) for selected/assembled, ⚠ (red) for needs_intervention, ● for in-progress
+- [x] Inline variant editing in pipeline (Edit button on each variant card; full-text area; guarded by generation lock)
+- [x] Inline revision editing in pipeline (Edit Revision button on revision step)
 
-**Error Handling:**
-- [ ] Ollama unreachable → clear error card with reconnect button
-- [ ] Generation timeout → partial recovery (save what was received if any)
-- [ ] Missing prompt file → clear explanation of which file is missing and expected path
-- [ ] Database write failure → error toast with retry option
-- [ ] Malformed output → raw text shown with a warning rather than crashing
+**Auto-pilot mode:**
+- [x] Sidebar checkbox "Auto-pilot: Enabled" (default on)
+- [x] Configurable max revision cycles (default 3)
+- [x] "▶ Start Auto-pilot" button (disabled when Ollama offline)
+- [x] Ollama judges best variant (low-temperature scoring pass → single letter A/B/C)
+- [x] Structured critique: VERDICT: PASS / VERDICT: FAIL + REQUIRED FIXES block
+- [x] Auto-pilot loop: draft → judge → critique → (pass: select) / (fail: revise → re-critique, up to limit)
+- [x] Stops entirely when loop limit reached; marks scene `needs_intervention`
+- [x] Needs-intervention scenes show red ⚠ sidebar indicator and a detailed intervention banner in pipeline view
+- [x] Recovery actions: "Reset — Resume Manual Review" and "Select Current Revision as Final"
+
+**Multi-user Edge Cases (phase-5 commit):**
+- [x] Generation lock: first caller wins, second sees in-progress state with Refresh button
+- [x] Edit conflict detection in Reader
+
+**LAN Deployment (phase-5 commit):**
+- [x] `start.bat` / `start.sh` with `--server.address 0.0.0.0`
+- [x] README multi-user section
+
+**Toast notifications (phase-5 commit):**
+- [x] All significant actions toast: generation complete, critique complete, revision complete, scene selected, chapter assembled
 
 **Performance:**
-- [ ] Scene discovery cached with `@st.cache_data` (invalidated on file system change)
-- [ ] Large prose not re-rendered unnecessarily (Streamlit reruns are scoped correctly)
-- [ ] SQLite queries indexed on `scene_key`
-
-**Multi-user Edge Cases:**
-- [ ] Two users attempting to generate for the same scene simultaneously → first gets the lock, second sees a "Generation in progress by [User A]" state
-- [ ] Edit conflicts: if User B saves an edit while User A is editing, User A's save warns them that content was updated
-
-**LAN Deployment:**
-- [ ] Launch script `start.bat` / `start.sh` that sets `--server.address 0.0.0.0`
-- [ ] Network setup instructions in README
+- [x] Scene discovery cached with `@st.cache_data(ttl=60)`
+- [x] SQLite queries indexed on `scene_key`
 
 **Acceptance Criteria:**
-- All error states show informative messages; no unhandled exceptions reach the user
-- Application handles 2 simultaneous users without data corruption
-- Page load time (cached) under 500ms for the scene picker
-- All animations run at 60fps (no jank)
-- Launch script works on Windows and macOS/Linux
+- Full pipeline (draft → auto-pilot through select) completes without manual intervention for a scene that passes critique
+- Scenes that hit the loop limit show red ⚠ in sidebar and a detailed intervention banner
+- "Proceed to Critique / Revision / Select" buttons correctly navigate to the next step
+- Inline editing is blocked while Ollama is generating
+- Launch scripts work on Windows and macOS/Linux
 
 ---
 

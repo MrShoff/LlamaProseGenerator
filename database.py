@@ -64,6 +64,11 @@ def _conn() -> sqlite3.Connection:
 def init_db() -> None:
     with _conn() as conn:
         conn.executescript(_SCHEMA)
+        # Migration: loop_count added in post-phase-5 polish
+        try:
+            conn.execute("ALTER TABLE scene_status ADD COLUMN loop_count INTEGER DEFAULT 0")
+        except Exception:
+            pass
 
 
 # ---------------------------------------------------------------------------
@@ -83,13 +88,14 @@ def set_scene_status(
     status: str,
     username: str,
     active_variant: str | None = None,
+    loop_count: int | None = None,
 ) -> None:
     with _conn() as conn:
         conn.execute(
             """
             INSERT INTO scene_status
-                (scene_key, status, active_variant, last_updated_by, last_updated_at)
-            VALUES (?, ?, ?, ?, datetime('now'))
+                (scene_key, status, active_variant, last_updated_by, last_updated_at, loop_count)
+            VALUES (?, ?, ?, ?, datetime('now'), 0)
             ON CONFLICT(scene_key) DO UPDATE SET
                 status          = excluded.status,
                 active_variant  = excluded.active_variant,
@@ -98,6 +104,11 @@ def set_scene_status(
             """,
             (scene_key, status, active_variant, username),
         )
+        if loop_count is not None:
+            conn.execute(
+                "UPDATE scene_status SET loop_count = ? WHERE scene_key = ?",
+                (loop_count, scene_key),
+            )
 
 
 def get_all_scene_statuses() -> dict[str, dict[str, Any]]:
