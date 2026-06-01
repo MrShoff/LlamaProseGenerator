@@ -161,5 +161,47 @@ if save_clicked:
             info_banner("Settings saved.", kind="success"),
             unsafe_allow_html=True,
         )
-        # Clear any cached data that depended on the old config
         st.cache_data.clear()
+
+# ── Database repair ───────────────────────────────────────────────────────────
+st.markdown("<br>", unsafe_allow_html=True)
+st.markdown(settings_section_open("Database"), unsafe_allow_html=True)
+st.markdown(
+    '<p style="font-family:var(--font-ui);font-size:0.875rem;color:var(--text-secondary);">'
+    "Re-derives every scene's pipeline status from the output files on disk. "
+    "Use this if the database gets out of sync — for example, after the smoke tests "
+    "or if you've manually edited output files.</p>",
+    unsafe_allow_html=True,
+)
+
+repair_col, _ = st.columns([1, 3])
+with repair_col:
+    repair_clicked = st.button("Sync status from files", use_container_width=True)
+
+if repair_clicked and prompts_ok and output_specified:
+    from database import set_scene_status
+    from scene_manager import (
+        active_variant_from_files,
+        discover_scenes,
+        status_from_files,
+    )
+    repair_scenes = discover_scenes(prompts_path)
+    for s in repair_scenes:
+        fs_status = status_from_files(output_path, s.chapter, s.scene)
+        av = active_variant_from_files(output_path, s.chapter, s.scene)
+        set_scene_status(s.scene_key, fs_status, "system", active_variant=av)
+    st.cache_data.clear()
+    st.markdown(
+        info_banner(
+            f"Synced {len(repair_scenes)} scenes from output files.",
+            kind="success",
+        ),
+        unsafe_allow_html=True,
+    )
+elif repair_clicked:
+    st.markdown(
+        info_banner("Configure valid project paths above before syncing.", kind="warning"),
+        unsafe_allow_html=True,
+    )
+
+st.markdown(settings_section_close(), unsafe_allow_html=True)

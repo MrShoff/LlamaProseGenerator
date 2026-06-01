@@ -738,6 +738,151 @@ hr {
 }
 .chapter-bar .seg.complete { background: var(--gold); }
 .chapter-bar .seg.progress { background: var(--gold-muted); }
+
+/* ── Scene picker (Pipeline sidebar) ────────────────────────────────────── */
+.scene-nav-group {
+    padding: 0 0.75rem;
+}
+.scene-nav-chapter {
+    font-family: var(--font-ui);
+    font-size: 0.5875rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    padding: 0.875rem 0.5rem 0.25rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.scene-nav-chapter:not(:first-child) {
+    border-top: 1px solid var(--border-subtle);
+}
+/* Make scene picker st.buttons look like nav items */
+.scene-nav-group .stButton > button {
+    text-align: left !important;
+    justify-content: flex-start !important;
+    font-family: var(--font-ui) !important;
+    font-size: 0.8125rem !important;
+    font-weight: 400 !important;
+    padding: 0.375rem 0.625rem !important;
+    border-radius: var(--radius-sm) !important;
+    border: none !important;
+    background: transparent !important;
+    color: var(--text-secondary) !important;
+    width: 100% !important;
+    letter-spacing: 0 !important;
+    margin-bottom: 1px;
+    transition: background var(--transition-fast), color var(--transition-fast) !important;
+}
+.scene-nav-group .stButton > button:hover {
+    background: var(--bg-elevated) !important;
+    color: var(--text-primary) !important;
+    transform: none !important;
+    box-shadow: none !important;
+}
+.scene-active .stButton > button {
+    background: var(--gold-subtle) !important;
+    color: var(--gold) !important;
+    font-weight: 500 !important;
+}
+.scene-locked .stButton > button {
+    opacity: 0.4 !important;
+    cursor: default !important;
+}
+
+/* ── Critique card ──────────────────────────────────────────────────────── */
+.critique-card {
+    background: var(--bg-inset);
+    border: 1px solid var(--border-medium);
+    border-left: 3px solid var(--rose);
+    border-radius: 0 var(--radius-md) var(--radius-md) 0;
+    padding: 1.25rem 1.5rem;
+    font-family: var(--font-ui);
+    font-size: 0.875rem;
+    line-height: 1.7;
+    color: var(--text-secondary);
+    white-space: pre-wrap;
+}
+.critique-card .critique-header {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--rose);
+    margin-bottom: 0.875rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+/* ── Diff view ──────────────────────────────────────────────────────────── */
+.diff-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin-top: 0.5rem;
+}
+.diff-col-label {
+    font-family: var(--font-ui);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 0.625rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border-subtle);
+}
+.diff-col-label.original { color: var(--text-muted); }
+.diff-col-label.revised  { color: var(--gold); }
+.diff-prose {
+    font-family: var(--font-display);
+    font-size: 1rem;
+    line-height: 1.8;
+    color: var(--text-primary);
+    white-space: pre-wrap;
+}
+.diff-removed {
+    background: rgba(139, 40, 40, 0.25);
+    color: #C87070;
+    border-radius: 2px;
+    padding: 0 2px;
+}
+.diff-added {
+    background: rgba(40, 100, 60, 0.22);
+    color: #70C894;
+    border-radius: 2px;
+    padding: 0 2px;
+}
+
+/* ── Locked scene state ─────────────────────────────────────────────────── */
+.locked-state {
+    text-align: center;
+    padding: 4rem 2rem;
+}
+.locked-state .lock-icon {
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+    opacity: 0.4;
+}
+.locked-state .lock-title {
+    font-family: var(--font-display);
+    font-size: 1.5rem;
+    font-weight: 300;
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+}
+.locked-state .lock-subtitle {
+    font-family: var(--font-ui);
+    font-size: 0.875rem;
+    color: var(--text-muted);
+}
+
+/* ── st.status() override ───────────────────────────────────────────────── */
+[data-testid="stStatusWidget"] {
+    background: var(--bg-surface) !important;
+    border: 1px solid var(--border-medium) !important;
+    border-radius: var(--radius-md) !important;
+}
 </style>
 """
 
