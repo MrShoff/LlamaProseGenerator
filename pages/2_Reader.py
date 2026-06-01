@@ -46,7 +46,11 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# Paragraph interaction: show action bar on click or text selection
+# Paragraph interaction: show action bar on click or text selection.
+# Streamlit renders st.columns() as a [data-testid="stHorizontalBlock"] that is a
+# direct sibling of the paragraph's element-container inside the st.container() wrapper.
+# We target that element directly — the reader-action-bar div trick doesn't work because
+# Streamlit never nests its column elements inside an injected <div>.
 st.markdown(
     """<script>
 (function () {
@@ -54,32 +58,59 @@ st.markdown(
   if (window.__readerSetup) return;
   window.__readerSetup = true;
 
-  function showBar(pid) {
-    document.querySelectorAll('.reader-action-bar:not(.para-open)').forEach(function (b) {
-      b.style.display = 'none';
-    });
-    var bar = document.querySelector('.reader-action-bar[data-para-id="' + pid + '"]');
-    if (bar) bar.style.display = 'flex';
+  var _active = null;
+
+  // Walk the direct children of the paragraph's stVerticalBlock container,
+  // returning the first stHorizontalBlock before any nested stVerticalBlock.
+  function getButtons(para) {
+    var container = para.closest('[data-testid="stVerticalBlock"]');
+    if (!container) return null;
+    var ch = container.children;
+    for (var i = 0; i < ch.length; i++) {
+      var tid = ch[i].dataset && ch[i].dataset.testid;
+      if (tid === 'stVerticalBlock') break;
+      if (tid === 'stHorizontalBlock') return ch[i];
+    }
+    return null;
   }
 
-  function hideAll() {
-    document.querySelectorAll('.reader-action-bar:not(.para-open)').forEach(function (b) {
-      b.style.display = 'none';
-    });
+  function hideActive() {
+    if (_active && !_active.classList.contains('reader-pinned')) {
+      _active.style.display = 'none';
+      _active = null;
+    }
+  }
+
+  function reveal(para) {
+    var btns = getButtons(para);
+    if (!btns) return;
+    if (_active && _active !== btns && !_active.classList.contains('reader-pinned')) {
+      _active.style.display = 'none';
+    }
+    btns.style.display = '';
+    _active = btns;
   }
 
   function setupParas() {
     document.querySelectorAll('.reader-paragraph:not([data-rl])').forEach(function (para) {
       para.setAttribute('data-rl', '1');
-      para.style.cursor = 'text';
+      var btns = getButtons(para);
+      if (!btns) return;
+      btns.classList.add('reader-action-bar-buttons');
+      if (para.classList.contains('para-action-open')) {
+        btns.classList.add('reader-pinned');
+        btns.style.display = '';
+      } else {
+        btns.classList.remove('reader-pinned');
+        btns.style.display = 'none';
+      }
       para.addEventListener('click', function (e) {
         e.stopPropagation();
-        var pid = this.getAttribute('data-para-id');
-        if (!pid) return;
-        var bar = document.querySelector('.reader-action-bar[data-para-id="' + pid + '"]');
-        if (!bar) return;
-        if (bar.classList.contains('para-open')) return;
-        if (bar.style.display === 'flex') { hideAll(); } else { showBar(pid); }
+        if (this.classList.contains('para-action-open')) return;
+        var btns = getButtons(this);
+        if (!btns) return;
+        if (btns.style.display !== 'none') { hideActive(); }
+        else { reveal(this); }
       });
     });
   }
@@ -92,23 +123,21 @@ st.markdown(
       var node = range.commonAncestorContainer;
       var el = node.nodeType === 3 ? node.parentElement : node;
       var para = el.closest('.reader-paragraph');
-      if (!para) return;
-      var pid = para.getAttribute('data-para-id');
-      if (pid) showBar(pid);
+      if (para) reveal(para);
     } catch (_) {}
   });
 
   document.addEventListener('click', function (e) {
     if (!e.target.closest('.reader-paragraph') &&
-        !e.target.closest('.reader-action-bar') &&
+        !e.target.closest('[data-testid="stHorizontalBlock"]') &&
         !e.target.closest('.reader-action-open')) {
-      hideAll();
+      hideActive();
     }
   });
 
   var obs = new MutationObserver(function () {
-    clearTimeout(window.__readerSetupT);
-    window.__readerSetupT = setTimeout(setupParas, 80);
+    clearTimeout(window.__readerT);
+    window.__readerT = setTimeout(setupParas, 80);
   });
   obs.observe(document.body, { childList: true, subtree: true });
   setupParas();
@@ -243,23 +272,22 @@ def _render_paragraph(block: ContentBlock, para_idx: int, para_text: str, edit_h
 
     is_edited = (key, para_idx) in edit_history_keys
     edited_class = " edited" if is_edited else ""
+    # para-action-open tells JS to pin the action bar visible while a form is open
+    open_class = " para-action-open" if is_open else ""
     para_id = f"{key}_{para_idx}"
-    action_bar_class = " para-open" if is_open else ""
 
     with st.container():
         # ── Paragraph prose ──
         st.markdown(
             f'<div class="reader-para-block">'
-            f'<div class="reader-paragraph{edited_class}" data-para-id="{para_id}">{html.escape(para_text)}</div>'
-            f'</div>',
+            f'<div class="reader-paragraph{edited_class}{open_class}" data-para-id="{para_id}">'
+            f'{html.escape(para_text)}</div></div>',
             unsafe_allow_html=True,
         )
 
-        # ── Action bar (hidden by default; shown on click/selection via JS, or always when para-open) ──
-        st.markdown(f'<div class="reader-action-bar{action_bar_class}" data-para-id="{para_id}">', unsafe_allow_html=True)
-        col_c, col_ai, col_e, col_rest = st.columns([1, 1, 1, 8])
+        # ── Action buttons — JS finds this stHorizontalBlock and manages its visibility ──
+        col_c, col_ai, col_e, _rest = st.columns([1, 1, 1, 8])
         with col_c:
-            st.markdown('<div class="reader-action-bar-comment">', unsafe_allow_html=True)
             if st.button("✦ Note", key=f"btn_c_{key}_{para_idx}"):
                 if is_open and open_action == "comment":
                     st.session_state.reader_open = None
@@ -267,9 +295,7 @@ def _render_paragraph(block: ContentBlock, para_idx: int, para_text: str, edit_h
                     st.session_state.reader_open = (key, para_idx, "comment")
                     st.session_state.reader_ai_pending = None
                 st.rerun()
-            st.markdown("</div>", unsafe_allow_html=True)
         with col_ai:
-            st.markdown('<div class="reader-action-bar-ai">', unsafe_allow_html=True)
             if st.button("✧ AI", key=f"btn_ai_{key}_{para_idx}"):
                 if is_open and open_action == "ai_prompt":
                     st.session_state.reader_open = None
@@ -278,9 +304,7 @@ def _render_paragraph(block: ContentBlock, para_idx: int, para_text: str, edit_h
                     st.session_state.reader_open = (key, para_idx, "ai_prompt")
                     st.session_state.reader_ai_pending = None
                 st.rerun()
-            st.markdown("</div>", unsafe_allow_html=True)
         with col_e:
-            st.markdown('<div class="reader-action-bar-edit">', unsafe_allow_html=True)
             if st.button("✎ Edit", key=f"btn_e_{key}_{para_idx}"):
                 if is_open and open_action == "edit":
                     st.session_state.reader_open = None
@@ -288,8 +312,6 @@ def _render_paragraph(block: ContentBlock, para_idx: int, para_text: str, edit_h
                     st.session_state.reader_open = (key, para_idx, "edit")
                     st.session_state.reader_ai_pending = None
                 st.rerun()
-            st.markdown("</div>", unsafe_allow_html=True)
-        st.markdown("</div>", unsafe_allow_html=True)
 
         # ── Comments ──
         para_comments = get_comments(key, paragraph_index=para_idx)

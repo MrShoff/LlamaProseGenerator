@@ -933,17 +933,14 @@ hr {
 .reader-paragraph.edited {
     border-left-color: var(--gold-muted);
 }
-/* Action bar — hidden until paragraph is clicked */
-.reader-action-bar {
-    display: none;
-    gap: 0.375rem;
-    padding: 0 0.875rem 0.5rem;
+/* Action bar buttons — JS stamps .reader-action-bar-buttons on the real stHorizontalBlock
+   and manages display:none / display:'' to show/hide it on click or text selection. */
+.reader-action-bar-buttons {
+    padding: 0 0.875rem 0.5rem !important;
+    margin-top: -0.25rem !important;
+    gap: 0.375rem !important;
 }
-.reader-action-bar.para-open {
-    display: flex !important;
-}
-.reader-action-bar .stButton > button {
-    opacity: 1 !important;
+.reader-action-bar-buttons .stButton > button {
     font-size: 0.625rem !important;
     padding: 1px 7px !important;
     border-radius: var(--radius-pill) !important;
@@ -957,22 +954,22 @@ hr {
     transition: border-color var(--transition-fast),
                 color var(--transition-fast), background var(--transition-fast) !important;
     transform: none !important;
+    box-shadow: none !important;
 }
-.reader-action-bar .stButton > button:hover {
+.reader-action-bar-buttons .stButton > button:hover {
     border-color: var(--border-strong) !important;
     color: var(--text-primary) !important;
     background: var(--bg-elevated) !important;
     box-shadow: none !important;
 }
-.reader-action-bar-comment .stButton > button:hover {
-    border-color: var(--border-strong) !important;
-}
-.reader-action-bar-ai .stButton > button:hover {
+/* AI button (2nd column) */
+.reader-action-bar-buttons [data-testid="stColumn"]:nth-child(2) .stButton > button:hover {
     border-color: var(--rose-muted) !important;
     color: var(--rose) !important;
     background: var(--rose-glow) !important;
 }
-.reader-action-bar-edit .stButton > button:hover {
+/* Edit button (3rd column) */
+.reader-action-bar-buttons [data-testid="stColumn"]:nth-child(3) .stButton > button:hover {
     border-color: var(--gold-muted) !important;
     color: var(--gold) !important;
     background: var(--gold-subtle) !important;
