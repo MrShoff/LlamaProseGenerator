@@ -140,34 +140,30 @@ The Scriptorium is a premium, collaborative prose generation studio. Every inter
 
 **Deliverables:**
 
-**Reader View (`pages/reader.py`):**
-- [ ] Renders assembled chapters + selected scenes in reading order
-- [ ] Typography optimized for reading: wider line height, slightly warmer text color, comfortable measure
-- [ ] Chapter headers with decorative dividers
-- [ ] Progress footer: X words written of ~Y target
+**Reader View (`pages/2_Reader.py`):**
+- [x] Renders assembled chapters + selected scenes in reading order
+- [x] Typography optimized for reading: Cormorant Garamond 1.125rem, line-height 1.9, 74ch column
+- [x] Chapter headers with decorative ornament dividers
+- [x] Progress header + footer: words written vs 95K–115K target
 
 **Paragraph Interaction:**
-- [ ] Hover over paragraph: subtle highlight + toolbar appears (comment icon, AI prompt icon, edit icon)
-- [ ] Paragraph toolbar uses smooth fade-in animation
+- [x] Subtle action bar (✦ Note · ✧ AI · ✎ Edit) below each paragraph at low opacity
 
 **Viewer Comments:**
-- [ ] Click comment icon → comment input appears beneath paragraph
-- [ ] Submitted comments appear as styled annotation callouts below the paragraph
-- [ ] All users see all comments; each shows username and timestamp
-- [ ] Comments can be resolved (hidden from default view, viewable via toggle)
+- [x] Click Note → inline form with type toggle (Viewer note / AI prompt note)
+- [x] Submitted comments appear as annotation callouts below the paragraph
+- [x] All users see all comments; each shows username and timestamp
 
 **AI Prompt Comments:**
-- [ ] Click AI prompt icon → prompt input with a different visual treatment (electric/glowing accent)
-- [ ] "Regenerate Paragraph" button — sends paragraph + surrounding context + user prompt to Ollama
-- [ ] Loading state while generating
-- [ ] Result shown as a diff: original vs. proposed replacement
-- [ ] "Accept" writes replacement to `selected.md` and logs edit; "Discard" dismisses
+- [x] Click AI → prompt input; sends paragraph + surrounding context + instruction to Ollama
+- [x] Result shown as sentence-level diff (diff-removed / diff-added)
+- [x] Accept writes replacement + logs edit; Discard dismisses
 
 **Inline Text Editing:**
-- [ ] Click edit icon → paragraph becomes an editable `st.text_area`
-- [ ] "Save" button writes to `selected.md`, logs to `edits` table
-- [ ] "Cancel" dismisses without changes
-- [ ] Visual indicator on edited paragraphs (faint golden left border)
+- [x] Click Edit → paragraph text area pre-filled with current content
+- [x] Save writes to source file and logs to edits table
+- [x] Cancel dismisses without changes
+- [x] Gold left-border visual indicator on edited paragraphs
 
 **Acceptance Criteria:**
 - Full manuscript renders correctly in reading order

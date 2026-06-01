@@ -883,6 +883,136 @@ hr {
     border: 1px solid var(--border-medium) !important;
     border-radius: var(--radius-md) !important;
 }
+
+/* ── Reader ─────────────────────────────────────────────────────────────── */
+.reader-chapter-heading {
+    font-family: var(--font-display);
+    font-size: 2.25rem;
+    font-weight: 300;
+    color: var(--text-primary);
+    letter-spacing: 0.06em;
+    text-align: center;
+    margin: 2.5rem 0 0.375rem;
+    line-height: 1.2;
+}
+.reader-chapter-ornament {
+    text-align: center;
+    color: var(--gold);
+    font-size: 0.75rem;
+    letter-spacing: 0.45em;
+    opacity: 0.55;
+    margin-bottom: 2.25rem;
+}
+.reader-scene-label {
+    font-family: var(--font-ui);
+    font-size: 0.625rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    text-align: center;
+    margin: 2rem 0 1.5rem;
+}
+.reader-para-block {
+    margin-bottom: 0.25rem;
+}
+.reader-paragraph {
+    font-family: var(--font-display);
+    font-size: 1.125rem;
+    line-height: 1.9;
+    color: var(--text-primary);
+    padding: 0.5rem 0.875rem;
+    border-radius: var(--radius-sm);
+    border-left: 3px solid transparent;
+    transition: background var(--transition-fast), border-color var(--transition-fast);
+    white-space: pre-wrap;
+}
+.reader-paragraph:hover {
+    background: var(--bg-elevated);
+}
+.reader-paragraph.edited {
+    border-left-color: var(--gold-muted);
+}
+/* Action bar — always rendered, subtle by default */
+.reader-action-bar {
+    display: flex;
+    gap: 0.375rem;
+    padding: 0 0.875rem 0.5rem;
+}
+.reader-action-bar .stButton > button {
+    opacity: 0.22 !important;
+    font-size: 0.625rem !important;
+    padding: 1px 7px !important;
+    border-radius: var(--radius-pill) !important;
+    border: 1px solid var(--border-medium) !important;
+    background: transparent !important;
+    color: var(--text-secondary) !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.06em !important;
+    min-height: unset !important;
+    line-height: 1.6 !important;
+    transition: opacity var(--transition-fast), border-color var(--transition-fast),
+                color var(--transition-fast), background var(--transition-fast) !important;
+    transform: none !important;
+}
+.reader-action-bar .stButton > button:hover {
+    opacity: 1 !important;
+    border-color: var(--border-strong) !important;
+    color: var(--text-primary) !important;
+    background: var(--bg-elevated) !important;
+    box-shadow: none !important;
+}
+.reader-action-bar-comment .stButton > button:hover {
+    border-color: var(--border-strong) !important;
+}
+.reader-action-bar-ai .stButton > button:hover {
+    border-color: var(--rose-muted) !important;
+    color: var(--rose) !important;
+    background: var(--rose-glow) !important;
+}
+.reader-action-bar-edit .stButton > button:hover {
+    border-color: var(--gold-muted) !important;
+    color: var(--gold) !important;
+    background: var(--gold-subtle) !important;
+}
+/* Active action block */
+.reader-action-open {
+    background: var(--bg-inset);
+    border: 1px solid var(--border-medium);
+    border-radius: var(--radius-md);
+    padding: 1rem 1.25rem;
+    margin: 0.25rem 0 0.75rem;
+}
+.reader-action-open .action-header {
+    font-family: var(--font-ui);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 0.75rem;
+}
+/* Progress footer */
+.reader-footer {
+    font-family: var(--font-ui);
+    font-size: 0.6875rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    text-align: center;
+    padding: 2.5rem 0 1rem;
+    border-top: 1px solid var(--border-subtle);
+    margin-top: 3rem;
+}
+.reader-footer .word-count {
+    font-size: 1.25rem;
+    font-family: var(--font-display);
+    font-weight: 300;
+    color: var(--gold);
+    letter-spacing: 0.02em;
+    display: block;
+    margin-bottom: 0.375rem;
+}
 </style>
 """
 
