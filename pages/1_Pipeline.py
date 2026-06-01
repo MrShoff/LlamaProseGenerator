@@ -10,6 +10,8 @@ import streamlit as st
 
 from _sidebar import render as render_sidebar
 from config import load_config, validate_config
+from session import init_session, sync_session
+from user_prefs import UserPrefs, load_prefs, save_prefs
 from database import (
     acquire_generation_lock,
     get_all_scene_statuses,
@@ -63,9 +65,12 @@ st.set_page_config(
 
 inject_styles()
 init_db()
+init_session()
 
 if "username" not in st.session_state:
     st.switch_page("app.py")
+
+sync_session()
 
 cfg = load_config()
 errors = validate_config(cfg)
@@ -497,6 +502,16 @@ def _render_autopilot_log(log_lines: list[str]) -> None:
     )
 
 
+def _save_autopilot_prefs() -> None:
+    username = st.session_state.get("username")
+    if not username:
+        return
+    prefs = load_prefs(username)
+    prefs.autopilot_enabled = st.session_state.get("autopilot_enabled", True)
+    prefs.autopilot_loop_limit = int(st.session_state.get("autopilot_loop_limit_val", 3))
+    save_prefs(username, prefs)
+
+
 def _render_autopilot_page(scenes: list, cfg, db_statuses: dict) -> None:
     """Scene-at-a-time autopilot runner with stop button and scrollable log."""
     username = st.session_state.username
@@ -574,16 +589,22 @@ def _render_scene_picker(scenes, cfg, db_statuses: dict) -> None:
         # ── Auto-pilot controls ──
         st.markdown('<div class="nav-section-label">Auto-pilot</div>', unsafe_allow_html=True)
 
+        # Load prefs once per session (cleared on hard refresh — exactly when we want to restore)
         if "autopilot_enabled" not in st.session_state:
-            st.session_state.autopilot_enabled = True
+            _prefs = load_prefs(st.session_state.username)
+            st.session_state.autopilot_enabled = _prefs.autopilot_enabled
+            st.session_state.autopilot_loop_limit_val = _prefs.autopilot_loop_limit
+            if "pipeline_scene" not in st.session_state and _prefs.last_pipeline_scene:
+                st.session_state.pipeline_scene = _prefs.last_pipeline_scene
 
-        st.checkbox("Enabled", key="autopilot_enabled")
+        st.checkbox("Enabled", key="autopilot_enabled", on_change=_save_autopilot_prefs)
         st.number_input(
             "Max revision cycles",
             min_value=1, max_value=10,
             value=cfg.autopilot_loop_limit,
             step=1,
             key="autopilot_loop_limit_val",
+            on_change=_save_autopilot_prefs,
         )
 
         if st.session_state.get("autopilot_enabled"):
@@ -648,6 +669,10 @@ def _render_scene_picker(scenes, cfg, db_statuses: dict) -> None:
                         if step_key in st.session_state:
                             del st.session_state[step_key]
                         st.session_state.pipeline_scene = s.scene_key
+                        _uname = st.session_state.username
+                        _p = load_prefs(_uname)
+                        _p.last_pipeline_scene = s.scene_key
+                        save_prefs(_uname, _p)
                         st.rerun()
                 st.markdown("</div>", unsafe_allow_html=True)
 

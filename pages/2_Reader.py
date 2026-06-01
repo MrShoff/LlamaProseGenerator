@@ -9,6 +9,7 @@ import streamlit.components.v1 as components
 
 from _sidebar import render as render_sidebar
 from config import load_config, validate_config
+from session import init_session, sync_session
 from database import (
     add_comment,
     add_edit,
@@ -148,9 +149,12 @@ components.html("""<script>
 </script>""", height=0)
 
 init_db()
+init_session()
 
 if "username" not in st.session_state:
     st.switch_page("app.py")
+
+sync_session()
 
 # ── Session state ─────────────────────────────────────────────────────────────
 # reader_open: (content_key, para_idx, action) | None
