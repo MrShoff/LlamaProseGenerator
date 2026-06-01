@@ -179,3 +179,37 @@ def username_screen() -> str:
         '</div>'
         '</div>'
     )
+
+
+def critique_card(content: str) -> str:
+    safe = content.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    return (
+        '<div class="critique-card">'
+        '<div class="critique-header">Critique</div>'
+        f'{safe}'
+        '</div>'
+    )
+
+
+def diff_view(original_html: str, revised_html: str) -> str:
+    return (
+        '<div class="diff-container">'
+        '<div>'
+        '<div class="diff-col-label original">Original Draft</div>'
+        f'<div class="diff-prose">{original_html}</div>'
+        '</div>'
+        '<div>'
+        '<div class="diff-col-label revised">Revision</div>'
+        f'<div class="diff-prose">{revised_html}</div>'
+        '</div>'
+        '</div>'
+    )
+
+
+def scene_nav_chapter(chapter: int, completed: int, total: int) -> str:
+    return (
+        f'<div class="scene-nav-chapter">'
+        f'<span>Chapter {chapter:02d}</span>'
+        f'<span style="color:var(--text-muted);font-weight:400;">{completed}/{total}</span>'
+        f'</div>'
+    )
