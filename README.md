@@ -90,15 +90,35 @@ Configure the paths to `04_Prompts` and `05_Local_Model_Output` in the Settings 
 
 ## Multi-User LAN Setup
 
-1. Run the server on the machine that also hosts Ollama:
-   ```bash
-   streamlit run app.py --server.address 0.0.0.0 --server.port 8501
-   ```
-2. Find the host machine's local IP address (e.g., `192.168.1.42`)
-3. Other users on the same network navigate to `http://192.168.1.42:8501`
-4. Each user sets a username on first visit — used for comment attribution
+**On the host machine** (the one running Ollama):
 
-The shared SQLite database (`prose_generator.db`) lives on the server machine. Refresh the browser to see changes made by other users.
+```bash
+# Windows
+start.bat
+
+# macOS / Linux
+chmod +x start.sh && ./start.sh
+```
+
+The script prints the local IP address. Share it with collaborators:
+
+```
+http://192.168.1.42:8501
+```
+
+Each user enters a username on first visit — used for comment and edit attribution.
+
+### How shared state works
+
+| What | Where |
+|---|---|
+| Generated prose | Markdown files on the host machine |
+| Comments, edits, scene status | Shared SQLite database (`prose_generator.db`) on the host |
+| Generation lock | SQLite — prevents two users generating the same scene simultaneously |
+
+**Refresh the browser** to see changes made by other users. If a generation is in progress, the Pipeline shows "Generation in progress by [User]" and blocks the generate button until it completes (or the 30-minute stale-lock TTL expires).
+
+**Edit conflicts** — if two users try to edit the same paragraph simultaneously, the second save is rejected with a conflict warning rather than silently overwriting the first.
 
 ---
 

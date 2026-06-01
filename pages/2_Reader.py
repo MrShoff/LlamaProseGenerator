@@ -118,13 +118,18 @@ def _block_from_dict(d: dict) -> ContentBlock:
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _save_edit(block: ContentBlock, para_idx: int, original: str, new_text: str) -> None:
-    paragraphs = split_paragraphs(block.text)
-    if para_idx >= len(paragraphs):
-        return
-    paragraphs[para_idx] = new_text.strip()
-    write_output(block.source_path, join_paragraphs(paragraphs))
+def _save_edit(block: ContentBlock, para_idx: int, original: str, new_text: str) -> bool:
+    """Write the edited paragraph to disk. Returns False if a conflict is detected."""
+    current_content = block.source_path.read_text(encoding="utf-8")
+    current_paras = split_paragraphs(current_content)
+    if para_idx >= len(current_paras):
+        return False
+    if current_paras[para_idx].strip() != original.strip():
+        return False  # content changed since we loaded — conflict
+    current_paras[para_idx] = new_text.strip()
+    write_output(block.source_path, join_paragraphs(current_paras))
     add_edit(block.content_key, para_idx, st.session_state.username, original, new_text)
+    return True
 
 
 def _build_diff_html(original: str, revised: str) -> tuple[str, str]:
@@ -265,6 +270,7 @@ def _render_comment_form(content_key: str, para_idx: int) -> None:
                     ct,
                     paragraph_index=para_idx,
                 )
+                st.toast("Note posted.", icon="✅")
             st.session_state.reader_open = None
             st.rerun()
     with c2:
@@ -287,8 +293,14 @@ def _render_edit_form(block: ContentBlock, para_idx: int, para_text: str) -> Non
     with c1:
         if st.button("Save", type="primary", key=f"esave_{block.content_key}_{para_idx}"):
             if new_text.strip() != para_text.strip():
-                _save_edit(block, para_idx, para_text, new_text.strip())
-                st.cache_data.clear()
+                ok = _save_edit(block, para_idx, para_text, new_text.strip())
+                if ok:
+                    st.cache_data.clear()
+                    st.toast("Edit saved.", icon="✅")
+                else:
+                    st.toast("Conflict: paragraph was edited by another user. Refresh to see latest.", icon="⚠️")
+                    st.rerun()
+                    return
             st.session_state.reader_open = None
             st.rerun()
     with c2:
@@ -311,8 +323,12 @@ def _render_ai_form(block: ContentBlock, para_idx: int, para_text: str) -> None:
         c1, c2, _ = st.columns([1, 1, 4])
         with c1:
             if st.button("Accept", type="primary", key=f"ai_acc_{block.content_key}_{para_idx}"):
-                _save_edit(block, para_idx, pending["original"], pending["text"])
-                st.cache_data.clear()
+                ok = _save_edit(block, para_idx, pending["original"], pending["text"])
+                if ok:
+                    st.cache_data.clear()
+                    st.toast("Paragraph updated.", icon="✅")
+                else:
+                    st.toast("Conflict: paragraph changed since regeneration. Refresh and try again.", icon="⚠️")
                 st.session_state.reader_open = None
                 st.session_state.reader_ai_pending = None
                 st.rerun()

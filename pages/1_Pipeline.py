@@ -10,9 +10,12 @@ import streamlit as st
 from _sidebar import render as render_sidebar
 from config import load_config, validate_config
 from database import (
+    acquire_generation_lock,
     get_all_scene_statuses,
+    get_generation_lock,
     get_scene_status,
     init_db,
+    release_generation_lock,
     set_scene_status,
 )
 from ollama_client import check_connectivity, generate
@@ -150,6 +153,7 @@ def _confirm_select(info, output_path: str, source_path: Path, label: str) -> No
             write_output(dest, text)
             set_scene_status(info.scene_key, "selected", st.session_state.username)
             st.cache_data.clear()
+            st.toast(f"{info.scene_key} selected — next scene unlocked.", icon="✅")
             st.rerun()
     with c2:
         if st.button("Cancel", use_container_width=True):
@@ -171,6 +175,7 @@ def _confirm_assemble(chapter: int, scenes, output_path: str) -> None:
                 for s in ch_scenes:
                     set_scene_status(s.scene_key, "assembled", st.session_state.username)
                 st.cache_data.clear()
+                st.toast(f"Chapter {chapter:02d} assembled.", icon="📖")
                 st.rerun()
             except ValueError as exc:
                 st.error(str(exc))
@@ -267,31 +272,60 @@ def _render_draft_tab(info, scenes, cfg, status: str, db_statuses: dict) -> None
         )
         st.markdown("<br>", unsafe_allow_html=True)
 
+        # Check if another user is already generating this scene
+        existing_lock = get_generation_lock(info.scene_key)
+        if existing_lock:
+            st.markdown(
+                info_banner(
+                    f"Generation in progress by **{existing_lock['locked_by']}** "
+                    f"({existing_lock['pass_name']}) — please wait.",
+                    kind="warning",
+                ),
+                unsafe_allow_html=True,
+            )
+            if st.button("Refresh", use_container_width=False):
+                st.rerun()
+            return
+
         if st.button("Generate 3 Variants", type="primary"):
+            if not acquire_generation_lock(info.scene_key, username, "draft"):
+                st.markdown(
+                    info_banner("Another user just started generating. Refresh to see their progress.", kind="warning"),
+                    unsafe_allow_html=True,
+                )
+                return
             try:
                 system_prompt = build_system_prompt(info, output_path, scenes)
                 user_prompt = read_prompt(info, "DRAFT_PROMPT")
             except FileNotFoundError as exc:
-                st.markdown(info_banner(str(exc), kind="error"), unsafe_allow_html=True)
+                release_generation_lock(info.scene_key)
+                st.markdown(
+                    info_banner(f"Prompt file missing: {exc}", kind="error"),
+                    unsafe_allow_html=True,
+                )
                 return
 
-            with st.status("Generating draft variants…", expanded=True) as status_box:
-                for variant, temp in VARIANT_TEMPERATURES.items():
-                    status_box.write(f"Variant {variant.upper()} · temperature {temp:.2f}…")
-                    try:
-                        text = generate(
-                            cfg.ollama_url, cfg.model_name,
-                            system_prompt, user_prompt,
-                            temperature=temp, num_ctx=cfg.num_ctx,
-                        )
-                        write_output(variant_path(output_path, info.chapter, info.scene, variant), text)
-                    except (ConnectionError, TimeoutError, RuntimeError) as exc:
-                        st.markdown(info_banner(f"Generation failed: {exc}", kind="error"), unsafe_allow_html=True)
-                        return
-                status_box.update(label="All variants generated.", state="complete")
+            try:
+                with st.status("Generating draft variants…", expanded=True) as status_box:
+                    for variant, temp in VARIANT_TEMPERATURES.items():
+                        status_box.write(f"Variant {variant.upper()} · temperature {temp:.2f}…")
+                        try:
+                            text = generate(
+                                cfg.ollama_url, cfg.model_name,
+                                system_prompt, user_prompt,
+                                temperature=temp, num_ctx=cfg.num_ctx,
+                            )
+                            write_output(variant_path(output_path, info.chapter, info.scene, variant), text)
+                        except (ConnectionError, TimeoutError, RuntimeError) as exc:
+                            st.markdown(info_banner(f"Generation failed: {exc}", kind="error"), unsafe_allow_html=True)
+                            return
+                    status_box.update(label="All variants generated.", state="complete")
+            finally:
+                release_generation_lock(info.scene_key)
 
             set_scene_status(info.scene_key, "has_variants", username)
             st.cache_data.clear()
+            st.toast(f"3 variants generated for {info.scene_key}", icon="✅")
             st.rerun()
         return
 
@@ -388,24 +422,39 @@ def _render_critique_tab(info, cfg, status: str, db_statuses: dict) -> None:
         st.markdown(info_banner(f"Ollama offline: {conn_err}", kind="error"), unsafe_allow_html=True)
         return
 
+    existing_lock = get_generation_lock(info.scene_key)
+    if existing_lock:
+        st.markdown(
+            info_banner(f"Generation in progress by **{existing_lock['locked_by']}** — please wait.", kind="warning"),
+            unsafe_allow_html=True,
+        )
+        return
+
     if st.button(f"Run Critique on Variant {variant.upper()}", type="primary"):
-        with st.status("Running critique…", expanded=True) as status_box:
-            status_box.write(f"Evaluating Variant {variant.upper()} · temperature {CRITIQUE_TEMPERATURE:.2f}…")
-            try:
-                system_prompt = build_system_prompt(info, output_path, _get_all_scenes(cfg))
-                user_prompt = build_critique_user_prompt(info, variant_text)
-                crit = generate(
-                    cfg.ollama_url, cfg.model_name,
-                    system_prompt, user_prompt,
-                    temperature=CRITIQUE_TEMPERATURE, num_ctx=cfg.num_ctx,
-                )
-                write_output(critique_path(output_path, info.chapter, info.scene, variant), crit)
-                status_box.update(label="Critique complete.", state="complete")
-            except (ConnectionError, TimeoutError, RuntimeError) as exc:
-                st.markdown(info_banner(f"Generation failed: {exc}", kind="error"), unsafe_allow_html=True)
-                return
+        if not acquire_generation_lock(info.scene_key, username, f"critique_{variant}"):
+            st.markdown(info_banner("Another user just started generating.", kind="warning"), unsafe_allow_html=True)
+            return
+        try:
+            with st.status("Running critique…", expanded=True) as status_box:
+                status_box.write(f"Evaluating Variant {variant.upper()} · temperature {CRITIQUE_TEMPERATURE:.2f}…")
+                try:
+                    system_prompt = build_system_prompt(info, output_path, _get_all_scenes(cfg))
+                    user_prompt = build_critique_user_prompt(info, variant_text)
+                    crit = generate(
+                        cfg.ollama_url, cfg.model_name,
+                        system_prompt, user_prompt,
+                        temperature=CRITIQUE_TEMPERATURE, num_ctx=cfg.num_ctx,
+                    )
+                    write_output(critique_path(output_path, info.chapter, info.scene, variant), crit)
+                    status_box.update(label="Critique complete.", state="complete")
+                except (ConnectionError, TimeoutError, RuntimeError) as exc:
+                    st.markdown(info_banner(f"Generation failed: {exc}", kind="error"), unsafe_allow_html=True)
+                    return
+        finally:
+            release_generation_lock(info.scene_key)
 
         set_scene_status(info.scene_key, "has_critique", username, active_variant=variant)
+        st.toast(f"Critique complete for {info.scene_key} Variant {variant.upper()}", icon="✅")
         st.rerun()
 
 
@@ -467,25 +516,40 @@ def _render_revision_tab(info, cfg, status: str, db_statuses: dict) -> None:
         st.markdown(info_banner(f"Ollama offline: {conn_err}", kind="error"), unsafe_allow_html=True)
         return
 
+    existing_lock = get_generation_lock(info.scene_key)
+    if existing_lock:
+        st.markdown(
+            info_banner(f"Generation in progress by **{existing_lock['locked_by']}** — please wait.", kind="warning"),
+            unsafe_allow_html=True,
+        )
+        return
+
     st.markdown("<br>", unsafe_allow_html=True)
     if st.button(f"Generate Revision of Variant {variant.upper()}", type="primary"):
-        with st.status("Generating revision…", expanded=True) as status_box:
-            status_box.write(f"Revising Variant {variant.upper()} · temperature {REVISION_TEMPERATURE:.2f}…")
-            try:
-                system_prompt = build_system_prompt(info, output_path, _get_all_scenes(cfg))
-                user_prompt = build_revision_user_prompt(info, variant_text, critique_text)
-                rev = generate(
-                    cfg.ollama_url, cfg.model_name,
-                    system_prompt, user_prompt,
-                    temperature=REVISION_TEMPERATURE, num_ctx=cfg.num_ctx,
-                )
-                write_output(revision_path(output_path, info.chapter, info.scene, variant), rev)
-                status_box.update(label="Revision complete.", state="complete")
-            except (ConnectionError, TimeoutError, RuntimeError) as exc:
-                st.markdown(info_banner(f"Generation failed: {exc}", kind="error"), unsafe_allow_html=True)
-                return
+        if not acquire_generation_lock(info.scene_key, username, f"revision_{variant}"):
+            st.markdown(info_banner("Another user just started generating.", kind="warning"), unsafe_allow_html=True)
+            return
+        try:
+            with st.status("Generating revision…", expanded=True) as status_box:
+                status_box.write(f"Revising Variant {variant.upper()} · temperature {REVISION_TEMPERATURE:.2f}…")
+                try:
+                    system_prompt = build_system_prompt(info, output_path, _get_all_scenes(cfg))
+                    user_prompt = build_revision_user_prompt(info, variant_text, critique_text)
+                    rev = generate(
+                        cfg.ollama_url, cfg.model_name,
+                        system_prompt, user_prompt,
+                        temperature=REVISION_TEMPERATURE, num_ctx=cfg.num_ctx,
+                    )
+                    write_output(revision_path(output_path, info.chapter, info.scene, variant), rev)
+                    status_box.update(label="Revision complete.", state="complete")
+                except (ConnectionError, TimeoutError, RuntimeError) as exc:
+                    st.markdown(info_banner(f"Generation failed: {exc}", kind="error"), unsafe_allow_html=True)
+                    return
+        finally:
+            release_generation_lock(info.scene_key)
 
         set_scene_status(info.scene_key, "has_revision", username, active_variant=variant)
+        st.toast(f"Revision generated for {info.scene_key} Variant {variant.upper()}", icon="✅")
         st.rerun()
 
 
