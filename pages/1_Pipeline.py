@@ -338,8 +338,12 @@ def _process_one_scene(
     status = row.get("status", "needs_draft")
 
     if status in ("selected", "assembled"):
-        _log(f"✓ {info.scene_key}: already complete.")
-        return log, False, True
+        # Verify the selected file actually exists; if not, the DB is stale — fall through.
+        if selected_path(cfg.output_path, info.chapter, info.scene).exists():
+            _log(f"✓ {info.scene_key}: already complete.")
+            return log, False, True
+        _log(f"↺ {info.scene_key}: DB says selected but file missing — re-processing.")
+        status = "needs_draft"
 
     if status == "needs_intervention":
         _log(f"⚠ {info.scene_key}: awaiting manual intervention — stopping.")
@@ -547,19 +551,19 @@ def _render_autopilot_page(scenes: list, cfg, db_statuses: dict) -> None:
         # Finalise
         selected = st.session_state.autopilot_selected_count
         if stop_requested:
-            st.markdown(info_banner("Auto-pilot stopped by user.", kind="warning"), unsafe_allow_html=True)
+            st.markdown(info_banner("Auto-pilot stopped.", kind="warning"), unsafe_allow_html=True)
         else:
             st.markdown(
                 info_banner(f"Auto-pilot complete — {selected} scene(s) selected.", kind="info"),
                 unsafe_allow_html=True,
             )
             st.toast("Auto-pilot finished.", icon="✅")
-        # Clean up state
+        # Clean up run state now; autopilot_running=False means the next user interaction
+        # (sidebar click, refresh) will rerender the normal pipeline view naturally.
         for k in ("autopilot_scene_idx", "autopilot_log", "autopilot_selected_count", "autopilot_stop_requested"):
             st.session_state.pop(k, None)
         st.session_state.autopilot_running = False
         st.cache_data.clear()
-        st.rerun()
     else:
         # Process next scene
         info = scenes[scene_idx]
