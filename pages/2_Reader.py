@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import streamlit as st
-import streamlit.components.v1 as components
 
 from _sidebar import render as render_sidebar
 from config import load_config, validate_config
@@ -51,9 +50,9 @@ st.markdown(
 # Paragraph interaction: show action bar on click or text selection.
 # st.markdown(<script>) never executes because Streamlit uses React's
 # dangerouslySetInnerHTML which doesn't run injected script tags.
-# st.components.v1.html() renders in a real iframe where scripts execute;
+# st.iframe() renders in a real iframe where scripts execute;
 # window.parent gives same-origin access to the Streamlit page's DOM.
-components.html("""<script>
+st.iframe("""<script>
 (function () {
   var win = window.parent;
   var doc = win.document;
