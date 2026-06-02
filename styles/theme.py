@@ -1180,19 +1180,29 @@ hr {
 
 /* Tablet (≤768px) --------------------------------------------------------- */
 @media (max-width: 768px) {
-    /* Restore the Streamlit header so the sidebar hamburger is reachable.
-       The toolbar and decoration inside are already hidden globally. */
+    /* Restore header + toolbar on mobile so the sidebar expand button is reachable.
+       stExpandSidebarButton lives inside stToolbar, which is hidden globally,
+       so we must un-hide the toolbar here too. stDeployButton stays hidden
+       via its own global rule; the decoration stripe is explicitly nuked below. */
     header[data-testid="stHeader"] {
         display: flex !important;
         align-items: center;
         background: var(--bg-surface) !important;
         border-bottom: 1px solid var(--border-subtle) !important;
         min-height: 44px !important;
-        padding: 0 0.5rem !important;
+        padding: 0 0.25rem !important;
         position: sticky;
         top: 0;
         z-index: 999;
     }
+    [data-testid="stToolbar"] {
+        display: flex !important;
+        align-items: center !important;
+        background: transparent !important;
+        padding: 0 !important;
+    }
+    /* Make the expand-sidebar arrow icon visible on our dark background */
+    [data-testid="stExpandSidebarButton"] svg { color: var(--text-secondary) !important; }
     [data-testid="stDecoration"] { display: none !important; }
 
     .main .block-container {
