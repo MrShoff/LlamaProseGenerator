@@ -933,14 +933,14 @@ hr {
 .reader-paragraph.edited {
     border-left-color: var(--gold-muted);
 }
-/* Action bar — always rendered, subtle by default */
-.reader-action-bar {
-    display: flex;
-    gap: 0.375rem;
-    padding: 0 0.875rem 0.5rem;
+/* Action bar buttons — JS stamps .reader-action-bar-buttons on the real stHorizontalBlock
+   and manages display:none / display:'' to show/hide it on click or text selection. */
+.reader-action-bar-buttons {
+    padding: 0 0.875rem 0.5rem !important;
+    margin-top: -0.25rem !important;
+    gap: 0.375rem !important;
 }
-.reader-action-bar .stButton > button {
-    opacity: 0.22 !important;
+.reader-action-bar-buttons .stButton > button {
     font-size: 0.625rem !important;
     padding: 1px 7px !important;
     border-radius: var(--radius-pill) !important;
@@ -951,26 +951,25 @@ hr {
     letter-spacing: 0.06em !important;
     min-height: unset !important;
     line-height: 1.6 !important;
-    transition: opacity var(--transition-fast), border-color var(--transition-fast),
+    transition: border-color var(--transition-fast),
                 color var(--transition-fast), background var(--transition-fast) !important;
     transform: none !important;
+    box-shadow: none !important;
 }
-.reader-action-bar .stButton > button:hover {
-    opacity: 1 !important;
+.reader-action-bar-buttons .stButton > button:hover {
     border-color: var(--border-strong) !important;
     color: var(--text-primary) !important;
     background: var(--bg-elevated) !important;
     box-shadow: none !important;
 }
-.reader-action-bar-comment .stButton > button:hover {
-    border-color: var(--border-strong) !important;
-}
-.reader-action-bar-ai .stButton > button:hover {
+/* AI button (2nd column) */
+.reader-action-bar-buttons [data-testid="stHorizontalBlock"] [data-testid="stColumn"]:nth-child(2) .stButton > button:hover {
     border-color: var(--rose-muted) !important;
     color: var(--rose) !important;
     background: var(--rose-glow) !important;
 }
-.reader-action-bar-edit .stButton > button:hover {
+/* Edit button (3rd column) */
+.reader-action-bar-buttons [data-testid="stHorizontalBlock"] [data-testid="stColumn"]:nth-child(3) .stButton > button:hover {
     border-color: var(--gold-muted) !important;
     color: var(--gold) !important;
     background: var(--gold-subtle) !important;
@@ -1012,6 +1011,311 @@ hr {
     letter-spacing: 0.02em;
     display: block;
     margin-bottom: 0.375rem;
+}
+
+/* ── Auto-pilot log ──────────────────────────────────────────────────────── */
+.autopilot-log {
+    height: 360px;
+    overflow-y: auto;
+    background: var(--bg-inset);
+    border: 1px solid var(--border-medium);
+    border-radius: var(--radius-md);
+    padding: 0.75rem 1rem;
+    font-family: var(--font-ui);
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+    margin: 0.75rem 0 1.25rem;
+    scroll-behavior: smooth;
+}
+.autopilot-log-line {
+    padding: 0.1rem 0;
+    white-space: pre-wrap;
+    line-height: 1.6;
+}
+.log-ts {
+    font-variant-numeric: tabular-nums;
+    color: var(--text-muted);
+    font-size: 0.75em;
+    letter-spacing: 0.03em;
+    user-select: none;
+}
+
+/* ── Pipeline step indicator ─────────────────────────────────────────────── */
+.step-indicator {
+    display: flex;
+    align-items: center;
+    padding: 0.75rem 0 1rem;
+}
+.step-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.3rem;
+    min-width: 72px;
+}
+.step-dot {
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-ui);
+    font-size: 0.75rem;
+    font-weight: 600;
+    transition: all var(--transition-base);
+    flex-shrink: 0;
+}
+.step-label {
+    font-family: var(--font-ui);
+    font-size: 0.625rem;
+    font-weight: 500;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+.step-conn {
+    flex: 1;
+    height: 2px;
+    background: var(--border-medium);
+    margin-bottom: 1.1rem;
+    transition: background var(--transition-slow);
+    min-width: 16px;
+}
+.step-conn.done { background: var(--gold-muted); }
+.step-item.step-done .step-dot {
+    background: rgba(26,60,42,0.5);
+    border: 1px solid rgba(42,92,66,0.6);
+    color: #6DD5A0;
+}
+.step-item.step-done .step-label { color: var(--text-muted); }
+.step-item.step-active .step-dot {
+    background: var(--gold-subtle);
+    border: 2px solid var(--gold);
+    color: var(--gold);
+}
+.step-item.step-active .step-label { color: var(--gold); font-weight: 700; }
+.step-item.step-future .step-dot {
+    background: var(--bg-inset);
+    border: 1px solid var(--border-medium);
+    color: var(--text-muted);
+}
+.step-item.step-future .step-label { color: var(--text-muted); }
+
+/* ── Scene sidebar states ─────────────────────────────────────────────────── */
+.scene-complete .stButton > button {
+    color: #6DD5A0 !important;
+}
+.scene-complete.scene-active .stButton > button {
+    color: var(--gold) !important;
+}
+.scene-intervention .stButton > button {
+    color: #C87070 !important;
+    background: rgba(74,26,36,0.15) !important;
+}
+.scene-intervention .stButton > button:hover {
+    background: rgba(74,26,36,0.35) !important;
+    color: #E08080 !important;
+}
+
+/* ── Comment remove button ───────────────────────────────────────────────── */
+/* Targets the trailing column of any row that contains a comment annotation. */
+[data-testid="stHorizontalBlock"]:has(.comment-annotation) [data-testid="stColumn"]:last-child .stButton > button {
+    font-size: 0.625rem !important;
+    padding: 0 6px !important;
+    min-height: 20px !important;
+    line-height: 1.5 !important;
+    height: 20px !important;
+    border-radius: var(--radius-pill) !important;
+    color: var(--text-muted) !important;
+    border-color: transparent !important;
+    background: transparent !important;
+    transform: none !important;
+    box-shadow: none !important;
+    margin-top: 0.5rem !important;
+    letter-spacing: 0 !important;
+}
+[data-testid="stHorizontalBlock"]:has(.comment-annotation) [data-testid="stColumn"]:last-child .stButton > button:hover {
+    color: #C87070 !important;
+    background: rgba(74,26,36,0.2) !important;
+    border-color: rgba(107,42,53,0.4) !important;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+/* ── Intervention banner ──────────────────────────────────────────────────── */
+.intervention-banner {
+    background: rgba(74,26,36,0.2);
+    border: 1px solid rgba(107,42,53,0.65);
+    border-left: 4px solid #C87070;
+    border-radius: var(--radius-md);
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.25rem;
+    animation: fadeIn var(--transition-base) ease both;
+}
+.intervention-banner .int-header {
+    font-family: var(--font-ui);
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #C87070;
+    margin-bottom: 0.75rem;
+}
+.intervention-banner .int-fixes {
+    font-family: var(--font-ui);
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    line-height: 1.65;
+}
+.intervention-banner .int-fix-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    margin-bottom: 0.3rem;
+}
+.intervention-banner .int-fix-bullet {
+    color: #C87070;
+    flex-shrink: 0;
+}
+
+/* ── Responsive / Mobile ─────────────────────────────────────────────────── */
+
+/* Tablet (≤768px) --------------------------------------------------------- */
+@media (max-width: 768px) {
+    /* Restore header + toolbar on mobile so the sidebar expand button is reachable.
+       stExpandSidebarButton lives inside stToolbar, which is hidden globally,
+       so we must un-hide the toolbar here too. stDeployButton stays hidden
+       via its own global rule; the decoration stripe is explicitly nuked below. */
+    header[data-testid="stHeader"] {
+        display: flex !important;
+        align-items: center;
+        background: var(--bg-surface) !important;
+        border-bottom: 1px solid var(--border-subtle) !important;
+        min-height: 44px !important;
+        padding: 0 0.25rem !important;
+        position: sticky;
+        top: 0;
+        z-index: 999;
+    }
+    [data-testid="stToolbar"] {
+        display: flex !important;
+        align-items: center !important;
+        background: transparent !important;
+        padding: 0 !important;
+    }
+    /* Make the expand-sidebar arrow icon visible on our dark background */
+    [data-testid="stExpandSidebarButton"] svg { color: var(--text-secondary) !important; }
+    [data-testid="stDecoration"] { display: none !important; }
+
+    .main .block-container {
+        padding-left: 1.25rem !important;
+        padding-right: 1.25rem !important;
+        padding-top: 1.5rem !important;
+        padding-bottom: 3rem !important;
+    }
+
+    /* Diff view: stack columns */
+    .diff-container {
+        grid-template-columns: 1fr !important;
+        gap: 1rem !important;
+    }
+
+    /* Step indicator: smaller dots */
+    .step-dot  { width: 24px !important; height: 24px !important; font-size: 0.625rem !important; }
+    .step-item { min-width: 52px !important; }
+    .step-label { font-size: 0.5rem !important; }
+
+    /* Reduce card padding */
+    .prose-card   { padding: 1.25rem !important; }
+    .critique-card { padding: 1rem 1.25rem !important; }
+}
+
+/* Phone (≤576px) ---------------------------------------------------------- */
+@media (max-width: 576px) {
+    .main .block-container {
+        padding-left: 0.75rem !important;
+        padding-right: 0.75rem !important;
+        padding-top: 1rem !important;
+    }
+
+    /* Force all column blocks to stack to full width */
+    .main [data-testid="stHorizontalBlock"] {
+        flex-wrap: wrap !important;
+        gap: 0.5rem !important;
+    }
+    .main [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+        width: 100% !important;
+        min-width: 100% !important;
+        flex: 1 1 100% !important;
+    }
+
+    /* Exception: reader action bar stays horizontal */
+    .main .reader-action-bar-buttons [data-testid="stHorizontalBlock"] {
+        flex-wrap: nowrap !important;
+        gap: 0.25rem !important;
+    }
+    .main .reader-action-bar-buttons [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {
+        flex: 0 0 auto !important;
+        min-width: auto !important;
+        width: auto !important;
+    }
+    /* Hide the spacer column in the action bar */
+    .main .reader-action-bar-buttons [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:last-child {
+        display: none !important;
+    }
+    /* Larger touch targets for action buttons */
+    .reader-action-bar-buttons .stButton > button {
+        font-size: 0.75rem !important;
+        padding: 5px 12px !important;
+        min-height: 36px !important;
+    }
+
+    /* Exception: comment rows stay side-by-side (note left, × right) */
+    .main [data-testid="stHorizontalBlock"]:has(.comment-annotation) {
+        flex-wrap: nowrap !important;
+    }
+    .main [data-testid="stHorizontalBlock"]:has(.comment-annotation) > [data-testid="stColumn"] {
+        flex: 0 0 auto !important;
+        min-width: auto !important;
+        width: auto !important;
+    }
+    .main [data-testid="stHorizontalBlock"]:has(.comment-annotation) > [data-testid="stColumn"]:first-child {
+        flex: 1 1 auto !important;
+    }
+
+    /* Step indicator: allow horizontal scroll rather than breaking layout */
+    .step-indicator {
+        overflow-x: auto !important;
+        flex-wrap: nowrap !important;
+        padding-bottom: 0.5rem !important;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    /* Page title */
+    .page-header .page-title { font-size: 1.5rem !important; }
+
+    /* Reader typography */
+    .reader-paragraph      { font-size: 1rem !important; line-height: 1.8 !important; }
+    .reader-chapter-heading { font-size: 1.75rem !important; }
+
+    /* Stat card */
+    .stat-card           { padding: 1rem !important; }
+    .stat-card .stat-value { font-size: 1.75rem !important; }
+
+    /* Cards */
+    .prose-card    { padding: 1rem !important; }
+    .settings-section { padding: 1rem !important; }
+
+    /* Info banner */
+    .info-banner { font-size: 0.8125rem !important; }
+
+    /* Minimum touch target for all buttons */
+    .stButton > button,
+    [data-testid^="baseButton"] {
+        min-height: 40px !important;
+    }
+
+    /* Username entry screen */
+    .username-screen              { padding-top: 2rem !important; }
+    .username-screen .logo-mark   { font-size: 2.25rem !important; }
 }
 </style>
 """

@@ -6,9 +6,18 @@ from typing import Any
 
 _DB_PATH = Path(__file__).parent / "prose_generator.db"
 
+_LOCK_TTL_MINUTES = 30  # Locks older than this are considered stale
+
 _SCHEMA = """
 PRAGMA journal_mode=WAL;
 PRAGMA foreign_keys=ON;
+
+CREATE TABLE IF NOT EXISTS generation_locks (
+    scene_key   TEXT PRIMARY KEY,
+    locked_by   TEXT NOT NULL,
+    pass_name   TEXT NOT NULL,
+    locked_at   TEXT DEFAULT (datetime('now'))
+);
 
 CREATE TABLE IF NOT EXISTS scene_status (
     scene_key        TEXT PRIMARY KEY,
@@ -55,6 +64,11 @@ def _conn() -> sqlite3.Connection:
 def init_db() -> None:
     with _conn() as conn:
         conn.executescript(_SCHEMA)
+        # Migration: loop_count added in post-phase-5 polish
+        try:
+            conn.execute("ALTER TABLE scene_status ADD COLUMN loop_count INTEGER DEFAULT 0")
+        except Exception:
+            pass
 
 
 # ---------------------------------------------------------------------------
@@ -74,13 +88,14 @@ def set_scene_status(
     status: str,
     username: str,
     active_variant: str | None = None,
+    loop_count: int | None = None,
 ) -> None:
     with _conn() as conn:
         conn.execute(
             """
             INSERT INTO scene_status
-                (scene_key, status, active_variant, last_updated_by, last_updated_at)
-            VALUES (?, ?, ?, ?, datetime('now'))
+                (scene_key, status, active_variant, last_updated_by, last_updated_at, loop_count)
+            VALUES (?, ?, ?, ?, datetime('now'), 0)
             ON CONFLICT(scene_key) DO UPDATE SET
                 status          = excluded.status,
                 active_variant  = excluded.active_variant,
@@ -89,6 +104,11 @@ def set_scene_status(
             """,
             (scene_key, status, active_variant, username),
         )
+        if loop_count is not None:
+            conn.execute(
+                "UPDATE scene_status SET loop_count = ? WHERE scene_key = ?",
+                (loop_count, scene_key),
+            )
 
 
 def get_all_scene_statuses() -> dict[str, dict[str, Any]]:
@@ -181,3 +201,50 @@ def get_edit_history(
                 (scene_key,),
             ).fetchall()
         return [dict(r) for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# Generation locks (multi-user concurrency)
+# ---------------------------------------------------------------------------
+
+def acquire_generation_lock(scene_key: str, username: str, pass_name: str) -> bool:
+    """Attempt to acquire the generation lock for a scene.
+
+    Returns True if acquired, False if another user currently holds it.
+    Stale locks (older than _LOCK_TTL_MINUTES) are automatically cleared.
+    """
+    with _conn() as conn:
+        conn.execute(
+            "DELETE FROM generation_locks WHERE scene_key = ? "
+            f"AND locked_at < datetime('now', '-{_LOCK_TTL_MINUTES} minutes')",
+            (scene_key,),
+        )
+        existing = conn.execute(
+            "SELECT * FROM generation_locks WHERE scene_key = ?", (scene_key,)
+        ).fetchone()
+        if existing:
+            return False
+        conn.execute(
+            "INSERT INTO generation_locks (scene_key, locked_by, pass_name) VALUES (?, ?, ?)",
+            (scene_key, username, pass_name),
+        )
+        return True
+
+
+def release_generation_lock(scene_key: str) -> None:
+    with _conn() as conn:
+        conn.execute("DELETE FROM generation_locks WHERE scene_key = ?", (scene_key,))
+
+
+def get_generation_lock(scene_key: str) -> dict[str, Any] | None:
+    """Return current lock info, or None if the scene is not locked (or lock is stale)."""
+    with _conn() as conn:
+        conn.execute(
+            "DELETE FROM generation_locks WHERE scene_key = ? "
+            f"AND locked_at < datetime('now', '-{_LOCK_TTL_MINUTES} minutes')",
+            (scene_key,),
+        )
+        row = conn.execute(
+            "SELECT * FROM generation_locks WHERE scene_key = ?", (scene_key,)
+        ).fetchone()
+        return dict(row) if row else None

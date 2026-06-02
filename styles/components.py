@@ -7,16 +7,17 @@ from __future__ import annotations
 # ---------------------------------------------------------------------------
 
 _STATUS_META: dict[str, tuple[str, str, str]] = {
-    "locked":       ("locked",   "◌",  "Locked"),
-    "needs_draft":  ("needs",    "✦",  "Needs Draft"),
-    "has_variants": ("progress", "◈",  "Variants Ready"),
-    "in_critique":  ("progress", "◎",  "Critiquing"),
-    "has_critique": ("progress", "◉",  "Critique Done"),
-    "in_revision":  ("progress", "◈",  "Revising"),
-    "has_revision": ("progress", "◈",  "Revised"),
-    "selected":     ("complete", "✓",  "Selected"),
-    "assembled":    ("complete", "◆",  "Assembled"),
-    "error":        ("error",    "✕",  "Error"),
+    "locked":              ("locked",   "◌",  "Locked"),
+    "needs_draft":         ("needs",    "✦",  "Needs Draft"),
+    "has_variants":        ("progress", "◈",  "Variants Ready"),
+    "in_critique":         ("progress", "◎",  "Critiquing"),
+    "has_critique":        ("progress", "◉",  "Critique Done"),
+    "in_revision":         ("progress", "◈",  "Revising"),
+    "has_revision":        ("progress", "◈",  "Revised"),
+    "selected":            ("complete", "✓",  "Selected"),
+    "assembled":           ("complete", "◆",  "Assembled"),
+    "needs_intervention":  ("error",    "⚠",  "Needs Review"),
+    "error":               ("error",    "✕",  "Error"),
 }
 
 
@@ -201,6 +202,51 @@ def diff_view(original_html: str, revised_html: str) -> str:
         '<div>'
         '<div class="diff-col-label revised">Revision</div>'
         f'<div class="diff-prose">{revised_html}</div>'
+        '</div>'
+        '</div>'
+    )
+
+
+def step_indicator(
+    steps: list[tuple[str, str]],
+    current: str,
+    completed: set[str],
+) -> str:
+    parts: list[str] = []
+    for i, (step_id, label) in enumerate(steps):
+        if step_id in completed:
+            cls, dot = "step-done", "✓"
+        elif step_id == current:
+            cls, dot = "step-active", str(i + 1)
+        else:
+            cls, dot = "step-future", str(i + 1)
+        parts.append(
+            f'<div class="step-item {cls}">'
+            f'<div class="step-dot">{dot}</div>'
+            f'<div class="step-label">{label}</div>'
+            f'</div>'
+        )
+        if i < len(steps) - 1:
+            conn_cls = "step-conn done" if step_id in completed else "step-conn"
+            parts.append(f'<div class="{conn_cls}"></div>')
+    return f'<div class="step-indicator">{"".join(parts)}</div>'
+
+
+def intervention_banner(fixes: list[str]) -> str:
+    fix_items = "".join(
+        f'<div class="int-fix-item">'
+        f'<span class="int-fix-bullet">—</span>'
+        f'<span>{fix}</span>'
+        f'</div>'
+        for fix in (fixes or ["See critique for details."])
+    )
+    return (
+        '<div class="intervention-banner">'
+        '<div class="int-header">⚠ Auto-pilot paused — manual review required</div>'
+        '<div class="int-fixes">'
+        '<div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:0.5rem;">'
+        'The following issues prevented auto-selection:</div>'
+        f'{fix_items}'
         '</div>'
         '</div>'
     )

@@ -8,11 +8,14 @@ import streamlit as st
 
 from _sidebar import render as render_sidebar
 from config import load_config, validate_config
+from session import init_session, sync_session
 from database import (
     add_comment,
     add_edit,
     get_comments,
+    get_edit_history,
     init_db,
+    resolve_comment,
 )
 from ollama_client import check_connectivity, generate
 from scene_manager import (
@@ -40,16 +43,123 @@ st.set_page_config(
 
 inject_styles()
 
-# Narrow the content column to a comfortable reading measure
+# Reading measure: 74ch on wide screens, full-width + tight padding on mobile.
 st.markdown(
-    "<style>.main .block-container { max-width: 74ch; padding-left: 3rem; padding-right: 3rem; }</style>",
+    "<style>.main .block-container { "
+    "max-width: min(74ch, 100%); "
+    "padding-left: clamp(0.75rem, 4vw, 3rem); "
+    "padding-right: clamp(0.75rem, 4vw, 3rem); "
+    "} [data-testid='stIframe'] { margin: 0 !important; }</style>",
     unsafe_allow_html=True,
 )
 
+# Paragraph interaction: show action bar on click or text selection.
+# st.markdown(<script>) never executes because Streamlit uses React's
+# dangerouslySetInnerHTML which doesn't run injected script tags.
+# st.iframe() renders in a real iframe where scripts execute;
+# window.parent gives same-origin access to the Streamlit page's DOM.
+st.iframe("""<script>
+(function () {
+  var win = window.parent;
+  var doc = win.document;
+
+  if (win.__readerSetup) return;
+  win.__readerSetup = true;
+
+  var _active = null;
+
+  // Walk direct children of the paragraph's stVerticalBlock container.
+  // Buttons live in stLayoutWrapper > stHorizontalBlock > stColumn.
+  // Stop before any nested stVerticalBlock (form container when panel is open).
+  function getButtons(para) {
+    var container = para.closest('[data-testid="stVerticalBlock"]');
+    if (!container) return null;
+    var ch = container.children;
+    for (var i = 0; i < ch.length; i++) {
+      var tid = ch[i].dataset && ch[i].dataset.testid;
+      if (tid === 'stVerticalBlock') break;
+      if (tid === 'stLayoutWrapper') return ch[i];
+    }
+    return null;
+  }
+
+  function hideActive() {
+    if (_active && !_active.classList.contains('reader-pinned')) {
+      _active.style.display = 'none';
+      _active = null;
+    }
+  }
+
+  function reveal(para) {
+    var btns = getButtons(para);
+    if (!btns) return;
+    if (_active && _active !== btns && !_active.classList.contains('reader-pinned')) {
+      _active.style.display = 'none';
+    }
+    btns.style.display = '';
+    _active = btns;
+  }
+
+  function setupParas() {
+    doc.querySelectorAll('.reader-paragraph:not([data-rl])').forEach(function (para) {
+      para.setAttribute('data-rl', '1');
+      var btns = getButtons(para);
+      if (!btns) return;
+      btns.classList.add('reader-action-bar-buttons');
+      if (para.classList.contains('para-action-open')) {
+        btns.classList.add('reader-pinned');
+        btns.style.display = '';
+      } else {
+        btns.classList.remove('reader-pinned');
+        btns.style.display = 'none';
+      }
+      para.addEventListener('click', function (e) {
+        e.stopPropagation();
+        if (this.classList.contains('para-action-open')) return;
+        var btns = getButtons(this);
+        if (!btns) return;
+        if (btns.style.display !== 'none') { hideActive(); }
+        else { reveal(this); }
+      });
+    });
+  }
+
+  doc.addEventListener('mouseup', function () {
+    var sel = win.getSelection();
+    if (!sel || sel.isCollapsed || !sel.toString().trim()) return;
+    try {
+      var range = sel.getRangeAt(0);
+      var node = range.commonAncestorContainer;
+      var el = node.nodeType === 3 ? node.parentElement : node;
+      var para = el.closest('.reader-paragraph');
+      if (para) reveal(para);
+    } catch (_) {}
+  });
+
+  doc.addEventListener('click', function (e) {
+    if (!e.target.closest('.reader-paragraph') &&
+        !e.target.closest('[data-testid="stLayoutWrapper"]') &&
+        !e.target.closest('.reader-action-open')) {
+      hideActive();
+    }
+  });
+
+  var obs = new win.MutationObserver(function () {
+    clearTimeout(win.__readerT);
+    win.__readerT = setTimeout(setupParas, 80);
+  });
+  obs.observe(doc.body, { childList: true, subtree: true });
+  setupParas();
+})();
+</script>""", height=1)
+
 init_db()
+init_session()
 
 if "username" not in st.session_state:
     st.switch_page("app.py")
+
+sync_session()
 
 # ── Session state ─────────────────────────────────────────────────────────────
 # reader_open: (content_key, para_idx, action) | None
@@ -118,13 +228,18 @@ def _block_from_dict(d: dict) -> ContentBlock:
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _save_edit(block: ContentBlock, para_idx: int, original: str, new_text: str) -> None:
-    paragraphs = split_paragraphs(block.text)
-    if para_idx >= len(paragraphs):
-        return
-    paragraphs[para_idx] = new_text.strip()
-    write_output(block.source_path, join_paragraphs(paragraphs))
+def _save_edit(block: ContentBlock, para_idx: int, original: str, new_text: str) -> bool:
+    """Write the edited paragraph to disk. Returns False if a conflict is detected."""
+    current_content = block.source_path.read_text(encoding="utf-8")
+    current_paras = split_paragraphs(current_content)
+    if para_idx >= len(current_paras):
+        return False
+    if current_paras[para_idx].strip() != original.strip():
+        return False  # content changed since we loaded — conflict
+    current_paras[para_idx] = new_text.strip()
+    write_output(block.source_path, join_paragraphs(current_paras))
     add_edit(block.content_key, para_idx, st.session_state.username, original, new_text)
+    return True
 
 
 def _build_diff_html(original: str, revised: str) -> tuple[str, str]:
@@ -167,75 +282,77 @@ def _render_paragraph(block: ContentBlock, para_idx: int, para_text: str, edit_h
 
     is_edited = (key, para_idx) in edit_history_keys
     edited_class = " edited" if is_edited else ""
+    # para-action-open tells JS to pin the action bar visible while a form is open
+    open_class = " para-action-open" if is_open else ""
+    para_id = f"{key}_{para_idx}"
 
-    # ── Paragraph prose ──
-    st.markdown(
-        f'<div class="reader-para-block">'
-        f'<div class="reader-paragraph{edited_class}">{html.escape(para_text)}</div>'
-        f'</div>',
-        unsafe_allow_html=True,
-    )
-
-    # ── Action bar ──
-    st.markdown('<div class="reader-action-bar">', unsafe_allow_html=True)
-    col_c, col_ai, col_e, col_rest = st.columns([1, 1, 1, 8])
-    with col_c:
-        st.markdown('<div class="reader-action-bar-comment">', unsafe_allow_html=True)
-        if st.button("✦ Note", key=f"btn_c_{key}_{para_idx}"):
-            if is_open and open_action == "comment":
-                st.session_state.reader_open = None
-            else:
-                st.session_state.reader_open = (key, para_idx, "comment")
-                st.session_state.reader_ai_pending = None
-            st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
-    with col_ai:
-        st.markdown('<div class="reader-action-bar-ai">', unsafe_allow_html=True)
-        if st.button("✧ AI", key=f"btn_ai_{key}_{para_idx}"):
-            if is_open and open_action == "ai_prompt":
-                st.session_state.reader_open = None
-                st.session_state.reader_ai_pending = None
-            else:
-                st.session_state.reader_open = (key, para_idx, "ai_prompt")
-                st.session_state.reader_ai_pending = None
-            st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
-    with col_e:
-        st.markdown('<div class="reader-action-bar-edit">', unsafe_allow_html=True)
-        if st.button("✎ Edit", key=f"btn_e_{key}_{para_idx}"):
-            if is_open and open_action == "edit":
-                st.session_state.reader_open = None
-            else:
-                st.session_state.reader_open = (key, para_idx, "edit")
-                st.session_state.reader_ai_pending = None
-            st.rerun()
-        st.markdown("</div>", unsafe_allow_html=True)
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    # ── Comments ──
-    para_comments = get_comments(key, paragraph_index=para_idx)
-    for c in para_comments:
+    with st.container():
+        # ── Paragraph prose ──
         st.markdown(
-            comment_annotation(
-                c["username"],
-                c["content"],
-                c["comment_type"],
-                c["created_at"][:16],
-            ),
+            f'<div class="reader-para-block">'
+            f'<div class="reader-paragraph{edited_class}{open_class}" data-para-id="{para_id}">'
+            f'{html.escape(para_text)}</div></div>',
             unsafe_allow_html=True,
         )
 
-    # ── Active action form ──
-    if not is_open:
-        return
+        # ── Action buttons — JS finds this stHorizontalBlock and manages its visibility ──
+        col_c, col_ai, col_e, _rest = st.columns([1, 1, 1, 8])
+        with col_c:
+            if st.button("✦ Note", key=f"btn_c_{key}_{para_idx}"):
+                if is_open and open_action == "comment":
+                    st.session_state.reader_open = None
+                else:
+                    st.session_state.reader_open = (key, para_idx, "comment")
+                    st.session_state.reader_ai_pending = None
+                st.rerun()
+        with col_ai:
+            if st.button("✧ AI", key=f"btn_ai_{key}_{para_idx}"):
+                if is_open and open_action == "ai_prompt":
+                    st.session_state.reader_open = None
+                    st.session_state.reader_ai_pending = None
+                else:
+                    st.session_state.reader_open = (key, para_idx, "ai_prompt")
+                    st.session_state.reader_ai_pending = None
+                st.rerun()
+        with col_e:
+            if st.button("✎ Edit", key=f"btn_e_{key}_{para_idx}"):
+                if is_open and open_action == "edit":
+                    st.session_state.reader_open = None
+                else:
+                    st.session_state.reader_open = (key, para_idx, "edit")
+                    st.session_state.reader_ai_pending = None
+                st.rerun()
 
-    with st.container():
-        if open_action == "comment":
-            _render_comment_form(key, para_idx)
-        elif open_action == "ai_prompt":
-            _render_ai_form(block, para_idx, para_text)
-        elif open_action == "edit":
-            _render_edit_form(block, para_idx, para_text)
+        # ── Comments ──
+        para_comments = get_comments(key, paragraph_index=para_idx)
+        for c in para_comments:
+            col_ann, col_del = st.columns([11, 1])
+            with col_ann:
+                st.markdown(
+                    comment_annotation(
+                        c["username"],
+                        c["content"],
+                        c["comment_type"],
+                        c["created_at"][:16],
+                    ),
+                    unsafe_allow_html=True,
+                )
+            with col_del:
+                if st.button("×", key=f"rmv_{c['id']}", help="Remove note"):
+                    resolve_comment(c["id"])
+                    st.rerun()
+
+        # ── Active action form ──
+        if not is_open:
+            return
+
+        with st.container():
+            if open_action == "comment":
+                _render_comment_form(key, para_idx)
+            elif open_action == "ai_prompt":
+                _render_ai_form(block, para_idx, para_text)
+            elif open_action == "edit":
+                _render_edit_form(block, para_idx, para_text)
 
 
 def _render_comment_form(content_key: str, para_idx: int) -> None:
@@ -265,6 +382,7 @@ def _render_comment_form(content_key: str, para_idx: int) -> None:
                     ct,
                     paragraph_index=para_idx,
                 )
+                st.toast("Note posted.", icon="✅")
             st.session_state.reader_open = None
             st.rerun()
     with c2:
@@ -287,8 +405,14 @@ def _render_edit_form(block: ContentBlock, para_idx: int, para_text: str) -> Non
     with c1:
         if st.button("Save", type="primary", key=f"esave_{block.content_key}_{para_idx}"):
             if new_text.strip() != para_text.strip():
-                _save_edit(block, para_idx, para_text, new_text.strip())
-                st.cache_data.clear()
+                ok = _save_edit(block, para_idx, para_text, new_text.strip())
+                if ok:
+                    st.cache_data.clear()
+                    st.toast("Edit saved.", icon="✅")
+                else:
+                    st.toast("Conflict: paragraph was edited by another user. Refresh to see latest.", icon="⚠️")
+                    st.rerun()
+                    return
             st.session_state.reader_open = None
             st.rerun()
     with c2:
@@ -311,8 +435,12 @@ def _render_ai_form(block: ContentBlock, para_idx: int, para_text: str) -> None:
         c1, c2, _ = st.columns([1, 1, 4])
         with c1:
             if st.button("Accept", type="primary", key=f"ai_acc_{block.content_key}_{para_idx}"):
-                _save_edit(block, para_idx, pending["original"], pending["text"])
-                st.cache_data.clear()
+                ok = _save_edit(block, para_idx, pending["original"], pending["text"])
+                if ok:
+                    st.cache_data.clear()
+                    st.toast("Paragraph updated.", icon="✅")
+                else:
+                    st.toast("Conflict: paragraph changed since regeneration. Refresh and try again.", icon="⚠️")
                 st.session_state.reader_open = None
                 st.session_state.reader_ai_pending = None
                 st.rerun()
@@ -434,7 +562,6 @@ blocks = [_block_from_dict(d) for d in raw_blocks]
 _render_chapter_nav(blocks)
 
 # Load edit history keys for the "edited" paragraph indicator
-from database import get_edit_history
 edit_keys: set[tuple[str, int]] = set()
 for b in blocks:
     for edit in get_edit_history(b.content_key):
@@ -459,33 +586,29 @@ st.markdown(
 st.markdown('<hr style="margin:0 0 0.5rem;">', unsafe_allow_html=True)
 
 # ── Manuscript content ────────────────────────────────────────────────────────
+# Scenes within a chapter flow continuously — no scene labels or breaks.
+# The ornament divider only appears between chapters.
 prev_chapter: int | None = None
 
 for block in blocks:
-    # Chapter heading when chapter changes
     if block.chapter != prev_chapter:
+        if prev_chapter is not None:
+            st.markdown(ornament_divider(), unsafe_allow_html=True)
         prev_chapter = block.chapter
         st.markdown(
             f'<div class="reader-chapter-heading">Chapter {block.chapter:02d}</div>'
             f'<div class="reader-chapter-ornament">· · · ✦ · · ·</div>',
             unsafe_allow_html=True,
         )
-    elif block.scene is not None:
-        # Scene break within a chapter (when not assembled)
-        st.markdown(
-            f'<div class="reader-scene-label">Scene {block.scene:02d}</div>',
-            unsafe_allow_html=True,
-        )
 
     paragraphs = split_paragraphs(block.text)
-
     for para_idx, para_text in enumerate(paragraphs):
         if not para_text.strip():
             continue
         _render_paragraph(block, para_idx, para_text, edit_keys)
 
-    # Scene/chapter separator
-    st.markdown(ornament_divider(), unsafe_allow_html=True)
+# Ornament after the final chapter, before the footer
+st.markdown(ornament_divider(), unsafe_allow_html=True)
 
 # ── Progress footer ───────────────────────────────────────────────────────────
 target_lo, target_hi = 95_000, 115_000

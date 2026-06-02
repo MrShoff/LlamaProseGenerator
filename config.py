@@ -14,6 +14,7 @@ class Config:
     ollama_url: str = "http://localhost:11434"
     model_name: str = ""
     num_ctx: int = 8192
+    autopilot_loop_limit: int = 3
 
 
 def load_config() -> Config:

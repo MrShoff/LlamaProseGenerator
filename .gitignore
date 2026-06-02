@@ -44,3 +44,9 @@ logs/
 
 # OS
 desktop.ini
+
+# Dev artifacts
+screenshots/
+.playwright-mcp/
+streamlit.log
+streamlit.err

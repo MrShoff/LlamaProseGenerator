@@ -5,12 +5,12 @@ import streamlit as st
 from _sidebar import render as render_sidebar
 from config import load_config, validate_config
 from database import init_db
+from session import init_session, sync_session
 from scene_manager import (
     chapter_is_assembleable,
     discover_scenes,
     scenes_for_chapter,
     selected_path,
-    split_paragraphs,
     status_from_files,
 )
 from styles.components import (
@@ -34,6 +34,7 @@ st.set_page_config(
 
 inject_styles()
 init_db()
+init_session()
 
 # ── Username gate ────────────────────────────────────────────────────────────
 if "username" not in st.session_state:
@@ -55,12 +56,14 @@ if "username" not in st.session_state:
                 cleaned = name.strip()
                 if cleaned:
                     st.session_state.username = cleaned
+                    st.query_params["u"] = cleaned
                     st.rerun()
                 else:
                     st.error("A name is required to enter.")
     st.stop()
 
 # ── Sidebar ──────────────────────────────────────────────────────────────────
+sync_session()
 render_sidebar("Dashboard")
 
 # ── Main content ─────────────────────────────────────────────────────────────

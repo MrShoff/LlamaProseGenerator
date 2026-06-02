@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import streamlit as st
 
 from _sidebar import render as render_sidebar
 from config import Config, load_config, save_config, validate_config
+from session import init_session, sync_session
 from ollama_client import check_connectivity, list_local_models
 from scene_manager import discover_scenes
 from styles.components import info_banner, page_header, settings_section_open, settings_section_close
@@ -17,10 +20,12 @@ st.set_page_config(
 )
 
 inject_styles()
+init_session()
 
 if "username" not in st.session_state:
     st.switch_page("app.py")
 
+sync_session()
 render_sidebar("Settings")
 
 st.markdown(
@@ -47,7 +52,6 @@ output_path = st.text_input(
 )
 
 # Live directory validation
-from pathlib import Path
 prompts_ok = bool(prompts_path) and Path(prompts_path).is_dir()
 output_specified = bool(output_path)
 
