@@ -1180,6 +1180,21 @@ hr {
 
 /* Tablet (≤768px) --------------------------------------------------------- */
 @media (max-width: 768px) {
+    /* Restore the Streamlit header so the sidebar hamburger is reachable.
+       The toolbar and decoration inside are already hidden globally. */
+    header[data-testid="stHeader"] {
+        display: flex !important;
+        align-items: center;
+        background: var(--bg-surface) !important;
+        border-bottom: 1px solid var(--border-subtle) !important;
+        min-height: 44px !important;
+        padding: 0 0.5rem !important;
+        position: sticky;
+        top: 0;
+        z-index: 999;
+    }
+    [data-testid="stDecoration"] { display: none !important; }
+
     .main .block-container {
         padding-left: 1.25rem !important;
         padding-right: 1.25rem !important;
